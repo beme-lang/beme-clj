@@ -6,7 +6,7 @@
 
 ```
 ;; one-liner
-defn(stars [owner repo] :stargazers_count(fetch-json(str("https://api.github.com/repos/" owner "/" repo))))
+defn begin stars [owner repo] :stargazers_count(fetch-json(str("https://api.github.com/repos/" owner "/" repo))) end
 
 ;; medium — begin/end for short blocks
 
