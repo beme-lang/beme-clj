@@ -6,7 +6,7 @@
 
 ```
 ;; conservative — parens, just move the head outside
-defn(greet [name] println(str("Hello, " name "!")))
+defn(greet [name] str("Hello, " name "!"))
 
 ;; begin/end — word delimiters instead of parens
 defn begin greet [name]
@@ -27,14 +27,27 @@ begin
       ->>
       begin
         active
-        map(fn([a] update(a :balance *(:balance(a) 1.05))))
-        remove(fn([a] neg?(:balance(a))))
+        map
+        begin
+          fn
+          begin [a]
+            update(a :balance *(:balance(a) 1.05))
+          end
+        end
+        remove
+        begin
+          fn
+          begin [a]
+            neg?(:balance(a))
+          end
+        end
       end
     ]
 
     reduce
     begin
-      fn([acc {:keys [id balance]}] assoc(acc id {:balance balance :status :processed}))
+      fn([acc {:keys [id balance]}]
+        assoc(acc id {:balance balance :status :processed}))
 
       {} balanced
     end
