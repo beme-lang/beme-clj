@@ -1,5 +1,9 @@
 beme — M-expressions for Clojure.
 
+[![CI](https://github.com/beme-lang/beme-clj/actions/workflows/ci.yml/badge.svg)](https://github.com/beme-lang/beme-clj/actions/workflows/ci.yml)
+[![Clojure](https://img.shields.io/badge/Clojure-JVM%20%7C%20Babashka%20%7C%20ClojureScript-blue?logo=clojure&logoColor=white)](https://clojure.org)
+[![License](https://img.shields.io/github/license/beme-lang/beme-clj)](LICENSE)
+
 A thin syntactic lens over Clojure. Two rules replace S-expression
 nesting with readable, familiar syntax — no paredit required.
 
