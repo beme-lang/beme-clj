@@ -12,6 +12,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
       - uses: DeLaGuardo/setup-clojure@13.3
         with:
           cli: latest
@@ -23,7 +27,7 @@ jobs:
             ~/.clojure/.cpcache
           key: clj-${{ hashFiles('deps.edn') }}
           restore-keys: clj-
-      - run: clojure -X:test
+      - run: clojure -J-Xss4m -X:test
 
   test-babashka:
     name: Babashka Tests
@@ -40,6 +44,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
