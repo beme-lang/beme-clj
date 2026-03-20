@@ -18,9 +18,7 @@ end
 
 ;; full — begin/end for structure, parens for one-liners
 
-defn
-begin
-  stars [owner repo]
+defn begin stars [owner repo]
 
   let
   begin
