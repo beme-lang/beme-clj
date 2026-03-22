@@ -315,12 +315,24 @@
                                       (and next-ch (= next-ch \"))
                                       (let [s (read-string-literal sc)]
                                         (conj! tokens (tok-at sc :syntax-quote-raw (str "`" tilde-prefix s) loc)))
+                                      ;; `~\char — character literal after unquote
+                                      (and next-ch (= next-ch \\))
+                                      (let [ch-lit (read-char-literal sc)]
+                                        (conj! tokens (tok-at sc :syntax-quote-raw (str "`" tilde-prefix ch-lit) loc)))
                                       ;; `~symbol — single token, no grouper needed
                                       next-ch
                                       (let [sym (read-symbol-str sc)]
                                         (conj! tokens (tok-at sc :syntax-quote-raw (str "`" tilde-prefix sym) loc)))
                                       :else
                                       (conj! tokens (tok-at sc :syntax-quote-raw (str "`" tilde-prefix) loc)))))
+                              ;; `\char — character literal, single token
+                              (and nxt (= nxt \\))
+                              (let [ch-lit (read-char-literal sc)]
+                                (conj! tokens (tok-at sc :syntax-quote-raw (str "`" ch-lit) loc)))
+                              ;; `"string" — string literal, single token
+                              (and nxt (= nxt \"))
+                              (let [s (read-string-literal sc)]
+                                (conj! tokens (tok-at sc :syntax-quote-raw (str "`" s) loc)))
                               ;; `symbol — namespace-resolve, single token
                               nxt
                               (let [sym-str (read-symbol-str sc)]

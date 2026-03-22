@@ -167,7 +167,7 @@
                            (assoc loc :hint "Maps need key-value pairs — check for a missing key or value")))
       (let [m (apply array-map forms)]
         (when (not= (count m) (/ (count forms) 2))
-          (errors/beme-error (str "Duplicate key in map literal")
+          (errors/beme-error "Duplicate key in map literal"
                              loc))
         m))))
 
@@ -177,7 +177,7 @@
     (let [forms (parse-forms-until p :close-brace loc)
           s (set forms)]
       (when (not= (count s) (count forms))
-        (errors/beme-error (str "Duplicate element in set literal")
+        (errors/beme-error "Duplicate element in set literal"
                            loc))
       s)))
 

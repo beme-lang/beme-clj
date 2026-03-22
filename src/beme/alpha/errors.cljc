@@ -78,22 +78,22 @@
          gutter-w (if (seq all-lines)
                     (count (str (apply max all-lines)))
                     1)
-         parts (transient [(str "Error: " msg)])]
+         parts (volatile! [(str "Error: " msg)])]
      ;; Source context with gutter
      (when context-line
-       (conj! parts (str "\n" (line-number-gutter line gutter-w) context-line))
+       (vswap! parts conj (str "\n" (line-number-gutter line gutter-w) context-line))
        (when (and col (pos? col))
-         (conj! parts (str "\n" (blank-gutter gutter-w)
-                           (span-underline col end-col)))))
+         (vswap! parts conj (str "\n" (blank-gutter gutter-w)
+                                 (span-underline col end-col)))))
      ;; Secondary locations
      (when (seq secondary)
        (doseq [{s-line :line s-col :col s-label :label} secondary]
          (when-let [ctx (and source s-line (source-context source s-line))]
-           (conj! parts (str "\n" (line-number-gutter s-line gutter-w) ctx))
+           (vswap! parts conj (str "\n" (line-number-gutter s-line gutter-w) ctx))
            (when (and s-col (pos? s-col))
-             (conj! parts (str "\n" (blank-gutter gutter-w)
-                               (apply str (repeat (dec s-col) " ")) "^ " s-label))))))
+             (vswap! parts conj (str "\n" (blank-gutter gutter-w)
+                                     (apply str (repeat (dec s-col) " ")) "^ " s-label))))))
      ;; Hint
      (when hint
-       (conj! parts (str "\nHint: " hint)))
-     (apply str (persistent! parts)))))
+       (vswap! parts conj (str "\nHint: " hint)))
+     (apply str @parts))))

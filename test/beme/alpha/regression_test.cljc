@@ -1051,3 +1051,77 @@
           (r/read-beme-string "{:a 1 :a 2}"))))
   (testing "{:a 1 :b 2} is fine"
     (is (= {:a 1 :b 2} (first (r/read-beme-string "{:a 1 :b 2}"))))))
+
+;; ---------------------------------------------------------------------------
+;; Bug: `\char (syntax-quote of character literal) silently broke. The
+;; backtick handler's catch-all called read-symbol-str, but \ is not a
+;; symbol-char, so it returned "". Token became bare "`" with \char left
+;; dangling as a separate :char token. Same bug for `"string" and `~\char.
+;; Fix: explicit \\ and \" handling before the symbol catch-all in both
+;; the main backtick handler and the `~ sub-handler.
+;; ---------------------------------------------------------------------------
+
+(deftest syntax-quote-char-literal
+  (testing "`\\a tokenizes as single :syntax-quote-raw token"
+    (let [tokens (tokenize "`\\a")]
+      (is (= 1 (count tokens)))
+      (is (= :syntax-quote-raw (:type (first tokens))))
+      (is (= "`\\a" (:value (first tokens))))))
+  (testing "`\\newline tokenizes as single token"
+    (let [tokens (tokenize "`\\newline")]
+      (is (= 1 (count tokens)))
+      (is (= :syntax-quote-raw (:type (first tokens))))
+      (is (= "`\\newline" (:value (first tokens))))))
+  #?(:clj
+  (testing "`\\a parses without error on JVM"
+    (is (some? (r/read-beme-string "`\\a"))))))
+
+(deftest syntax-quote-string-literal
+  (testing "`\"foo\" tokenizes as single :syntax-quote-raw token"
+    (let [tokens (tokenize "`\"foo\"")]
+      (is (= 1 (count tokens)))
+      (is (= :syntax-quote-raw (:type (first tokens))))
+      (is (= "`\"foo\"" (:value (first tokens))))))
+  #?(:clj
+  (testing "`\"foo\" parses without error on JVM"
+    (is (some? (r/read-beme-string "`\"foo\""))))))
+
+(deftest syntax-quote-unquote-char-literal
+  (testing "`~\\a tokenizes as single :syntax-quote-raw token"
+    (let [tokens (tokenize "`~\\a")]
+      (is (= 1 (count tokens)))
+      (is (= :syntax-quote-raw (:type (first tokens))))))
+  (testing "`~@\\a tokenizes as single :syntax-quote-raw token"
+    (let [tokens (tokenize "`~@\\a")]
+      (is (= 1 (count tokens)))
+      (is (= :syntax-quote-raw (:type (first tokens))))))
+  #?(:clj
+  (testing "`~\\a parses without error on JVM"
+    (is (some? (r/read-beme-string "`~\\a"))))))
+
+;; ---------------------------------------------------------------------------
+;; Bug: pp-map underestimated val-col for single-line keys.
+;; val-col was (+ (count last-line) 1) but single-line keys don't include
+;; inner-col indentation in their text (it's added by the join). So the
+;; value appeared to have more horizontal space than it actually did,
+;; causing map values to be printed flat when they should break.
+;; Fix: add inner-col for single-line keys; multi-line keys already have
+;; indentation baked into the last line by pp.
+;; ---------------------------------------------------------------------------
+
+#?(:clj
+(deftest pprint-map-value-column-includes-indent
+  (testing "map value breaks when key + indent + value exceed width"
+    ;; Map is multi-line (flat > width 30). Inside, inner-col = 2.
+    ;; Key :k is 2 chars. Correct val-col = 2 + 2 + 1 = 5.
+    ;; Bug val-col was 2 + 1 = 3 (missing inner-col).
+    ;; Value "fff(arg1 arg2 arg3 arg4 a)" is 26 chars.
+    ;; At correct val-col 5: 5 + 26 = 31 > 30 → value breaks.
+    ;; At bug val-col 3:     3 + 26 = 29 ≤ 30 → value stays flat (wrong).
+    (let [form (sorted-map :k '(fff arg1 arg2 arg3 arg4 a) :z 1)
+          result (pprint/pprint-form form {:width 30})
+          lines (str/split-lines result)]
+      (is (> (count lines) 3) "value should break to multi-line")
+      (doseq [line lines]
+        (is (<= (count line) 34)
+            (str "line exceeds width: " (pr-str line))))))))

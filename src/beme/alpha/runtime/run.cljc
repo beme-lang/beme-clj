@@ -13,12 +13,12 @@
 
 (defn- default-reader-opts
   "Build reader opts, merging caller-provided opts with platform defaults.
-   Provides :resolve-keyword default on JVM when not supplied by caller.
+   Does NOT provide a default :resolve-keyword — :: keywords use the
+   deferred eval path so they resolve in the file's declared namespace
+   at eval time, not the caller's namespace at read time.
    Passes through all other reader opts unchanged."
   [opts]
-  (let [rk (or (:resolve-keyword opts)
-               #?(:clj #(clojure.core/read-string %)
-                  :cljs nil))
+  (let [rk (:resolve-keyword opts)
         reader-opts (dissoc opts :eval)]
     (cond-> reader-opts
       rk (assoc :resolve-keyword rk))))
@@ -29,7 +29,8 @@
    opts:
      :eval            — eval fn (default: eval; required on CLJS)
      :resolve-keyword — fn to resolve :: keywords at read time
-                        (default: clojure.core/read-string on JVM; required on CLJS
+                        (default: none — :: keywords resolve at eval time
+                        in the file's declared namespace. Required on CLJS
                         for code that uses :: keywords)"
   ([s] (run-string s {}))
   ([s eval-fn-or-opts]
