@@ -116,7 +116,10 @@ The pipeline has three stages (composed by `beme.alpha.pipeline`):
 | `emit/printer_test` | Printer: Clojure forms → beme text. Individual form cases. |
 | `emit/pprint_test` | Pretty-printer: width-aware formatting, begin/end, comments |
 | `roundtrip_test` | Read → print → re-read identity. Structural invariant tests. |
-| `regression_test` | **Only** scar tissue for specific bugs — must reference the bug it prevents. Not for design tests or feature coverage. |
+| `regression/scan_test` | Scar tissue: tokenizer and grouper bugs (opaque form depth, char/string in syntax-quote, symbol parsing, EOF handling) |
+| `regression/reader_test` | Scar tissue: parser bugs (discard sentinel, depth limits, head types, spacing, duplicates, metadata) |
+| `regression/emit_test` | Scar tissue: printer and pprint bugs (quoted lists, #() arity, empty list, map column, width) |
+| `regression/errors_test` | Scar tissue: error infrastructure and resolve error-wrapping bugs (source-context, gutter width, CLJS guards) |
 | `core_test` | Public API surface (`beme->forms`, `forms->beme`, `pprint-beme`, etc.) |
 | `runtime/repl_test` | REPL infrastructure (`input-state`, `read-input`) |
 | `runtime/run_test` | File runner: `run-string`, `run-file`, shebang handling, custom eval-fn |
