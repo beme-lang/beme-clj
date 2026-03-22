@@ -316,17 +316,17 @@ All of these work exactly as in Clojure:
 
 - Data literals: `[1 2 3]`, `{:a 1}`, `#{1 2 3}`, `:keyword`, `"string"`
 - Reader macros: `@deref`, `^metadata`, `#'var`, `#_discard`, `'quote`
-- Anonymous functions: `#(inc(%))` → `(fn [%1] (inc %1))`. Body must be a single expression. Uses beme syntax inside.
+- Anonymous functions: `#(inc(%))` → `(fn [%1] (inc %1))`, `#(rand())` → `(fn [] (rand))`. Body must be a single expression. Uses beme syntax inside.
 - Regex: `#"pattern"`
 - Character literals: `\a`, `\newline`, `\space`
 - Tagged literals: `#inst`, `#uuid`
-- Auto-resolve keywords: `::foo` — in the REPL and file runner, resolved at read time (like Clojure). When using `beme->forms` directly without `:resolve-keyword`, deferred to eval time via `(read-string "::foo")`. On CLJS, `:resolve-keyword` is required (errors without it)
+- Auto-resolve keywords: `::foo` — in the file runner, deferred to eval time so `::foo` resolves in the file's declared namespace (not the caller's). In the REPL, resolved at read time (like Clojure). When using `beme->forms` directly without `:resolve-keyword`, deferred to eval time via `(read-string "::foo")`. On CLJS, `:resolve-keyword` is required (errors without it)
 - Reader conditionals: `#?(:clj x :cljs y)` — passed through opaquely
 - Namespaced maps: `#:ns{}`
 - Destructuring in all binding positions
 - Commas are whitespace
 - Line comments: `; comment`
-- Quoted lists: `'(x y z)` — the only case where bare `(...)` is allowed
+- Quoted lists: `'(x y z)` — the only case where bare `(...)` is allowed. Quoted lists containing sublists with non-callable heads (numbers, strings, booleans, nil) fall back to Clojure S-expression output via `pr-str`, since beme has no syntax for bare lists with those heads
 
 
 ## What's Different from Clojure

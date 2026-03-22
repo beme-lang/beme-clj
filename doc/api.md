@@ -294,11 +294,11 @@ Run `.beme` files or beme source strings.
 (beme.alpha.runtime.run/run-string s opts)
 ```
 
-Read beme source string, eval each form, return the last result. The second argument can be an eval function (backward compatible) or an opts map.
+Read beme source string, eval each form, return the last result. Strips leading `#!` shebang lines before parsing. The second argument can be an eval function (backward compatible) or an opts map.
 
 Options (when passing a map):
 - `:eval` — eval function (default: `eval`; required on CLJS)
-- `:resolve-keyword` — function to resolve `::` keywords at read time (default: `clojure.core/read-string` on JVM; required on CLJS for code that uses `::` keywords)
+- `:resolve-keyword` — function to resolve `::` keywords at read time (default: none — `::` keywords resolve at eval time in the file's declared namespace. Required on CLJS for code that uses `::` keywords)
 
 ```clojure
 (run-string "def(x 42)\n+(x 1)")

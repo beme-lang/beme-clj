@@ -95,7 +95,7 @@ ClojureScript without modification.
 | R15 | Parse all Clojure data literals unchanged | Done |
 | R16 | Parse Clojure reader macros (`@`, `^`, `#'`, `#_`, `'`) | Done |
 | R17 | Pass `#?()` reader conditionals through to Clojure's reader | Done |
-| R18 | Parse `defprotocol(...)`, `defrecord(...)`, `defmulti(...)`, `defmethod(...)` | Done |
+| R18 | Parse `defprotocol(...)`, `defrecord(...)`, `deftype(...)`, `reify(...)`, `defmulti(...)`, `defmethod(...)` | Done |
 | R19 | Parse Java interop: `.method()`, `Class/static()`, `.-field()` | Done |
 | R20 | Commas are whitespace | Done |
 | R21 | Line/column tracking for error messages | Done |
