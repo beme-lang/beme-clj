@@ -27,6 +27,21 @@ Two rules. Everything else is Clojure.
 
 **Rule 2** (optional) — `begin`/`end` instead of parens: `f begin x y end` => `(f x y)`
 
+## Installation
+
+Add to `deps.edn`:
+
+```clojure
+io.github.beme-lang/beme-clj {:git/tag "v0.1.0" :git/sha "5c8487b"}
+```
+
+Or clone and use directly:
+
+```bash
+git clone https://github.com/beme-lang/beme-clj.git
+cd beme-clj
+```
+
 ## Getting Started
 
 ```bash
