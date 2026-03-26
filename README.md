@@ -99,6 +99,7 @@ Requires [Babashka](https://babashka.org) or [Clojure](https://clojure.org).
 
 - [Language Reference](doc/language-reference.md) — complete syntax guide
 - [API Reference](doc/api.md) — public functions
+- [Development](doc/development.md) — testing, architecture
 - [Design Decisions](doc/design-decisions.md) — rationale behind each choice
 - [Product Requirements](doc/PRD.md) — requirements and known limitations
 
