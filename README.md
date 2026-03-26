@@ -21,11 +21,18 @@ defn begin stars [owner repo]
 end
 ```
 
-Two rules. Everything else is Clojure.
+## Why
+
+M-expressions were McCarthy's original intended syntax for Lisp (1960).
+S-expressions were meant to be internal representation only — but they stuck.
+beme picks up where McCarthy left off: two rules that make nesting self-evident,
+while preserving Clojure's semantics exactly.
 
 **Rule 1** — head outside the parens: `f(x y)` => `(f x y)`
 
 **Rule 2** (optional) — `begin`/`end` instead of parens: `f begin x y end` => `(f x y)`
+
+Everything else is Clojure.
 
 ## Installation
 
@@ -88,10 +95,3 @@ Requires [Babashka](https://babashka.org) or [Clojure](https://clojure.org).
 - [Development](doc/development.md) — testing, architecture
 - [Design Decisions](doc/design-decisions.md) — rationale behind each choice
 - [Product Requirements](doc/PRD.md) — requirements and known limitations
-
-## Why
-
-M-expressions were McCarthy's original intended syntax for Lisp (1960).
-S-expressions were meant to be internal representation only — but they stuck.
-beme picks up where McCarthy left off: two rules that make nesting self-evident,
-while preserving Clojure's semantics exactly.
