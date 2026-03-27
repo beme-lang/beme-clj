@@ -193,3 +193,33 @@
       (doseq [line lines]
         (is (<= (count line) 34)
             (str "line exceeds width: " (pr-str line))))))))
+
+;; ---------------------------------------------------------------------------
+;; Bug: pprint silently dropped metadata on multi-line call forms.
+;; The flat path (printer/print-form) handled metadata, but pp dispatched
+;; on (call? form) before checking metadata, so ^:private defn(...) lost
+;; the ^:private prefix when the form exceeded width.
+;; Fix: pp checks metadata before structural dispatch.
+;; ---------------------------------------------------------------------------
+
+(deftest pprint-metadata-on-multi-line-forms
+  (testing "^:private preserved on multi-line call"
+    (let [form (with-meta '(defn foo [x] x) {:private true})
+          result (pprint/pprint-form form {:width 10})]
+      (is (re-find #"^\^:private" result))))
+  (testing "^:private preserved on flat call"
+    (let [form (with-meta '(defn foo [x] x) {:private true})
+          result (pprint/pprint-form form {:width 200})]
+      (is (re-find #"^\^:private" result))))
+  (testing "^String type tag preserved"
+    (let [form (with-meta '(defn foo [x] x) {:tag 'String})
+          result (pprint/pprint-form form {:width 10})]
+      (is (re-find #"^\^String" result))))
+  (testing "^{:doc ...} map metadata preserved"
+    (let [form (with-meta '(defn foo [x] x) {:doc "hello"})
+          result (pprint/pprint-form form {:width 10})]
+      (is (re-find #"^\^\{:doc" result))))
+  (testing "metadata on non-call forms (vector)"
+    (let [form (with-meta [1 2 3] {:tag 'ints})
+          result (pprint/pprint-form form {:width 10})]
+      (is (re-find #"^\^ints" result)))))

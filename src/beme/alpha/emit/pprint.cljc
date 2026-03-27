@@ -229,12 +229,42 @@
 ;; Main dispatch
 ;; ---------------------------------------------------------------------------
 
+(defn- pp-meta-prefix
+  "If form has user metadata (excluding :line/:column/:file/:ws), return
+   the prefix string (e.g. \"^:private\") and the stripped form. Otherwise nil."
+  [form]
+  (when (and (some? form)
+             #?(:clj  (instance? clojure.lang.IMeta form)
+                :cljs (satisfies? IMeta form))
+             (some? (meta form))
+             (seq (dissoc (meta form) :line :column :file :ws)))
+    (let [m (dissoc (meta form) :line :column :file :ws)
+          prefix (cond
+                   (and (= 1 (count m))
+                        (keyword? (key (first m)))
+                        (true? (val (first m))))
+                   (str "^" (flat (key (first m))))
+                   (and (= 1 (count m))
+                        (contains? m :tag)
+                        (symbol? (:tag m)))
+                   (str "^" (flat (:tag m)))
+                   :else
+                   (str "^" (flat m)))]
+      {:prefix prefix :stripped (with-meta form nil)})))
+
 (defn- pp
   "Pretty-print a form at the given column and width."
   [form col width]
   (let [comments (form-comments form)
         indent (indent-str col)
         formatted (cond
+                    ;; Metadata prefix — emit before the form, recurse on stripped
+                    (pp-meta-prefix form)
+                    (let [{:keys [prefix stripped]} (pp-meta-prefix form)
+                          prefix-len (inc (count prefix))
+                          inner (pp stripped (+ col prefix-len) width)]
+                      (str prefix " " inner))
+
                     ;; Quote with list inner — use '(...) with S-expression inside
                     (and (call? form) (= 'quote (first form))
                          (seq? (second form)))
