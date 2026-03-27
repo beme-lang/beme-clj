@@ -73,3 +73,22 @@
     #?(:clj (is (nil? (run/run-string "#!/usr/bin/env bb beme-run")))))
   (testing "no shebang — normal parsing"
     #?(:clj (is (= 42 (run/run-string "42"))))))
+
+;; ---------------------------------------------------------------------------
+;; Bug: :: keywords resolved in caller's namespace, not the file's declared ns.
+;; default-reader-opts provided #(clojure.core/read-string %) as default
+;; :resolve-keyword, which eagerly resolved :: at read time — before the
+;; file's ns form had been eval'd. A file with ns(my.ns) followed by ::foo
+;; silently got :user/foo instead of :my.ns/foo.
+;; Fix: no default :resolve-keyword — :: keywords use the deferred eval path.
+;; ---------------------------------------------------------------------------
+
+#?(:clj
+(deftest run-string-auto-keyword-resolves-in-declared-ns
+  (testing "::foo resolves in the file's declared namespace, not the caller's"
+    (let [result (binding [*ns* *ns*]
+                   (run/run-string "ns(my.beme.test.ns.kw)\n::foo"))]
+      (is (= :my.beme.test.ns.kw/foo result))))
+  (testing "::foo without ns declaration resolves in current namespace"
+    (is (= (keyword (str (ns-name *ns*)) "bar")
+           (run/run-string "::bar"))))))

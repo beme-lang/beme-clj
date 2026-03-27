@@ -136,9 +136,15 @@
             outer-indent (indent-str col)
             entries (map (fn [[k v]]
                            (let [pp-k (pp k inner-col width)
-                                 ;; Value column: after the key's last line + space
+                                 ;; Value column: after the key's last line + space.
+                                 ;; Single-line keys lack indent (it's added by the
+                                 ;; join), so we add inner-col. Multi-line keys have
+                                 ;; indentation baked into the last line by pp.
                                  last-line (peek (str/split-lines pp-k))
-                                 val-col (+ (count last-line) 1)]
+                                 multi-line? (not= last-line pp-k)
+                                 val-col (if multi-line?
+                                           (+ (count last-line) 1)
+                                           (+ inner-col (count last-line) 1))]
                              (str pp-k " " (pp v val-col width))))
                          form)]
         (str "{\n"
