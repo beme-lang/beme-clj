@@ -1,6 +1,7 @@
 (ns beme.alpha.emit.pprint-test
   (:require [clojure.test :refer [deftest is testing]]
-            [beme.alpha.emit.pprint :as pprint]))
+            [beme.alpha.emit.pprint :as pprint]
+            [beme.alpha.parse.reader :as r]))
 
 ;; ---------------------------------------------------------------------------
 ;; Flat output — forms that fit within width
@@ -129,3 +130,59 @@
 
 (deftest pprint-forms-single
   (is (= "42" (pprint/pprint-forms [42]))))
+
+;; ---------------------------------------------------------------------------
+;; Pprint roundtrip: pretty-printed output must re-parse to same forms
+;; ---------------------------------------------------------------------------
+
+(deftest pprint-roundtrip-single-forms
+  (doseq [[label form]
+          [["def"         '(def x 42)]
+           ["defn"        '(defn greet [name] (println (str "Hello " name)))]
+           ["let"         '(let [x 1 y 2] (+ x y))]
+           ["if"          '(if (> x 0) "positive" "negative")]
+           ["when"        '(when (> x 0) (println x) x)]
+           ["cond"        '(cond (> x 0) "pos" (< x 0) "neg" :else "zero")]
+           ["case"        '(case x 1 "one" 2 "two" "other")]
+           ["try"         '(try (risky) (catch Exception e (handle e)) (finally (cleanup)))]
+           ["threading"   '(->> xs (filter odd?) (map inc) (reduce +))]
+           ["ns"          '(ns my.app (:require [clojure.string :as str]))]
+           ["defprotocol" '(defprotocol Drawable (draw [this canvas]))]
+           ["defrecord"   '(defrecord Circle [center radius])]
+           ["loop"        '(loop [i 0 acc []] (if (>= i 5) acc (recur (inc i) (conj acc i))))]
+           ["for"         '(for [x xs :when (> x 0)] (* x x))]
+           ["fn"          '(fn [x y] (+ x y))]]]
+    (testing (str label " pprint roundtrip")
+      (let [pp (pprint/pprint-form form {:width 40})
+            re-parsed (r/read-beme-string pp)]
+        (is (= [form] re-parsed)
+            (str label " failed:\n" pp))))))
+
+(deftest pprint-roundtrip-nested-begin-end
+  (testing "multi-level nested begin/end re-parses correctly"
+    (let [form '(defn process [items]
+                  (let [result (for [item items]
+                                 (if (even? item) (* item 2) item))]
+                    (reduce + 0 result)))
+          pp (pprint/pprint-form form {:width 40})
+          re-parsed (r/read-beme-string pp)]
+      (is (= [form] re-parsed))
+      (is (re-find #"begin" pp) "should use begin/end at this width"))))
+
+(deftest pprint-roundtrip-multi-forms
+  (testing "pprint-forms output re-parses to same forms"
+    (let [forms ['(ns my.app) '(def x 42) '(defn f [x] (+ x 1))]
+          pp (pprint/pprint-forms forms {:width 40})
+          re-parsed (r/read-beme-string pp)]
+      (is (= forms re-parsed)))))
+
+(deftest pprint-exact-indentation
+  (testing "let body indented by 2 under begin"
+    (is (= "let begin\n  [x 1]\n  +(x 1)\nend"
+           (pprint/pprint-form '(let [x 1] (+ x 1)) {:width 15}))))
+  (testing "defn name on head line, body indented by 2"
+    (let [result (pprint/pprint-form '(defn f [x] (+ x 1)) {:width 15})]
+      (is (= "defn begin f\n  [x]\n  +(x 1)\nend" result))))
+  (testing "nested begin/end indentation compounds"
+    (let [result (pprint/pprint-form '(defn f [x] (let [y 1] (+ x y))) {:width 15})]
+      (is (re-find #"\n    " result) "inner let body should be indented 4 spaces"))))

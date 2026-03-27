@@ -33,3 +33,20 @@
       (is (= \r (nth src (source/line-col->offset src 2 3))))
       (is (= \b (nth src (source/line-col->offset src 3 1))))
       (is (= \z (nth src (source/line-col->offset src 3 3)))))))
+
+(deftest line-col->offset-crlf
+  (testing "\\r\\n line endings — \\r is part of line, \\n advances"
+    ;; line-col->offset only recognizes \n as line break.
+    ;; \r is a regular character within the line.
+    (let [src "ab\r\ncd\r\nef"]
+      (is (= \a (nth src (source/line-col->offset src 1 1))))
+      (is (= \b (nth src (source/line-col->offset src 1 2))))
+      (is (= \return (nth src (source/line-col->offset src 1 3))))
+      (is (= \c (nth src (source/line-col->offset src 2 1))))
+      (is (= \e (nth src (source/line-col->offset src 3 1))))))
+  (testing "\\r alone does not advance line"
+    (let [src "a\rb\nc"]
+      (is (= \a (nth src (source/line-col->offset src 1 1))))
+      (is (= \return (nth src (source/line-col->offset src 1 2))))
+      (is (= \b (nth src (source/line-col->offset src 1 3))))
+      (is (= \c (nth src (source/line-col->offset src 2 1)))))))

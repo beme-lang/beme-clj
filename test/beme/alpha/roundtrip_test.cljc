@@ -614,3 +614,39 @@
   (testing "real-world defn with begin/end roundtrips"
     (let [[f1 f2 _] (roundtrip-forms "defn begin greet [name] str(\"Hello \" name) end")]
       (is (= f1 f2)))))
+
+;; ---------------------------------------------------------------------------
+;; letfn, condp, deftype with implementations
+;; ---------------------------------------------------------------------------
+
+(deftest roundtrip-letfn
+  (let [[f1 f2 _] (roundtrip-forms "letfn([double([x] *(x 2))] double(5))")]
+    (is (= f1 f2))))
+
+(deftest roundtrip-letfn-mutual
+  (let [[f1 f2 _] (roundtrip-forms "letfn([even?([n] if(zero?(n) true odd?(dec(n)))) odd?([n] if(zero?(n) false even?(dec(n))))] even?(4))")]
+    (is (= f1 f2))))
+
+(deftest roundtrip-condp
+  (let [[f1 f2 _] (roundtrip-forms "condp(= x 1 \"one\" 2 \"two\" \"default\")")]
+    (is (= f1 f2))))
+
+(deftest roundtrip-condp-custom-pred
+  (let [[f1 f2 _] (roundtrip-forms "condp(contains? #{1 2 3} #{1} \"has one\" \"nope\")")]
+    (is (= f1 f2))))
+
+(deftest roundtrip-deftype-with-impls
+  (let [[f1 f2 _] (roundtrip-forms "deftype(Point [x y] Object toString([this] str(\"(\" .-x(this) \",\" .-y(this) \")\")))")
+        ;; deftype forms may contain generated class names, compare structure
+        form1 (first f1)]
+    (is (= 'deftype (first form1)))
+    (is (= 'Point (second form1)))
+    (is (= f1 f2))))
+
+(deftest roundtrip-some-threading
+  (testing "some-> roundtrips"
+    (let [[f1 f2 _] (roundtrip-forms "some->(m :a :b)")]
+      (is (= f1 f2))))
+  (testing "some->> roundtrips"
+    (let [[f1 f2 _] (roundtrip-forms "some->>(x str inc)")]
+      (is (= f1 f2)))))
