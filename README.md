@@ -65,9 +65,9 @@ Interactive REPL:
 
 ```bash
 $ bb beme repl                                          # Babashka
-beme=> +(1 2)
+user=> +(1 2)
 3
-beme=> map(inc [1 2 3])
+user=> map(inc [1 2 3])
 (2 3 4)
 ```
 
@@ -77,6 +77,13 @@ Convert between beme and Clojure (direction detected from extension):
 $ bb beme convert hello.beme                            # .beme → Clojure
 $ bb beme convert hello.clj                             # .clj → beme
 $ clojure -T:beme convert :file '"hello.beme"'          # Clojure JVM
+```
+
+Format `.beme` files (normalize syntax via pprint):
+
+```bash
+$ bb beme format hello.beme                             # in-place
+$ bb beme format src/                                   # directory, recursive
 ```
 
 Requires [Babashka](https://babashka.org) or [Clojure](https://clojure.org).
