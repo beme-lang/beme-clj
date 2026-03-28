@@ -19,4 +19,7 @@
               :main-opts ["-m" "cljs-test-runner.main"
                           "-d" "test"
                           "-r" ".*-test$"
-                          "-x" "node"]}}}
+                          "-x" "node"]}
+  :build {:deps {io.github.clojure/tools.build {:mvn/version "0.10.7"}
+                 slipset/deps-deploy {:mvn/version "0.2.2"}}
+          :ns-default build}}}
