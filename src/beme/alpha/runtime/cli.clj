@@ -1,6 +1,7 @@
 (ns beme.alpha.runtime.cli
-  "Shim — loads cli.beme which defines all vars in this namespace.
-   The real implementation lives in cli.beme (the first beme component in beme)."
+  "Shim — loads cli.beme at require time which defines all vars in this namespace.
+   The real implementation lives in cli.beme (the first beme component in beme).
+   Not AOT-compatible: top-level run-string executes at load time by design."
   (:require [beme.alpha.runtime.run :as beme-run]
             [clojure.java.io :as io]))
 

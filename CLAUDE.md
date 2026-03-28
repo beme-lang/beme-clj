@@ -75,7 +75,7 @@ The pipeline has three stages (composed by `beme.alpha.pipeline`):
 - `beme.alpha.core` (.cljc) — Public API in three tracks: text-to-form (`beme->forms`, `forms->beme`), form-to-text (`forms->clj`, `clj->forms`), text-to-text (`beme->clj`, `clj->beme`). Also `pprint-beme` for pretty-printing and `run-pipeline` for tooling access to intermediate pipeline state. `clj->forms` and `clj->beme` are JVM only.
 - `beme.alpha.runtime.repl` (.cljc) — REPL. Requires `eval`; JVM/Babashka only by default, CLJS with injected `:eval`/`:read-line`.
 - `beme.alpha.runtime.run` (.cljc) — File runner. Requires `eval` + `slurp`; JVM/Babashka only by default.
-- `beme.alpha.runtime.cli` (.clj + .beme) — Unified CLI: `run`, `repl`, `convert`, `format`, `version`. The `.clj` shim loads `cli.beme` — the first beme component implemented in beme itself. Babashka entry point via `bb.edn`.
+- `beme.alpha.runtime.cli` (.clj + .beme) — Unified CLI: `run`, `repl`, `convert`, `format`, `version`. The `.clj` shim loads `cli.beme` at require time (top-level `run-string`) — the first beme component implemented in beme itself. Babashka entry point via `bb.edn`. Not AOT-compatible (load-time eval by design).
 - `beme.alpha.test-runner` (.clj) — Eval + fixture test runner. JVM only.
 
 ### Platform tiers
