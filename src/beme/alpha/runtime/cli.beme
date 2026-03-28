@@ -48,7 +48,7 @@ end
 defn- begin expand-inputs
   [inputs pred]
   mapcat begin
-    fn([path] if(.isDirectory(io/file(path)) find-files(path pred) [path]))
+    fn([path] if(.isDirectory(io/file(path)) find-files(path pred) if(pred(path) [path] [])))
     inputs
   end
 end
