@@ -556,8 +556,21 @@
       (is (= f1 f2)))))
 
 ;; ---------------------------------------------------------------------------
-;; begin/end delimiters
+;; Chained calls — list-headed calls: ((f x) y) → f(x)(y)
 ;; ---------------------------------------------------------------------------
+
+(deftest roundtrip-chained-call
+  (testing "((f x) y) roundtrips via f(x)(y)"
+    (let [[f1 f2 text] (roundtrip-forms "f(x)(y)")]
+      (is (= f1 f2))
+      (is (= "f(x)(y)" text))))
+  (testing "triple chain (((f x) y) z) roundtrips"
+    (let [[f1 f2 text] (roundtrip-forms "f(x)(y)(z)")]
+      (is (= f1 f2))
+      (is (= "f(x)(y)(z)" text))))
+  (testing "((comp inc dec) 5) roundtrips"
+    (let [[f1 f2 _] (roundtrip-forms "comp(inc dec)(5)")]
+      (is (= f1 f2)))))
 
 ;; ---------------------------------------------------------------------------
 ;; Opaque forms (JVM only)

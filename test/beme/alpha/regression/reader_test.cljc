@@ -381,3 +381,25 @@
           (core/beme->forms "{:a 1 :a 2}"))))
   (testing "{:a 1 :b 2} is fine"
     (is (= {:a 1 :b 2} (first (core/beme->forms "{:a 1 :b 2}"))))))
+
+;; ---------------------------------------------------------------------------
+;; Bug: printer emits f(x)(y) for list-headed calls ((f x) y), but reader
+;; rejected (y) as "Bare parentheses." Roundtrip violated P13.
+;; Fix: parse-call-chain in parse-form chains calls after any form.
+;; ---------------------------------------------------------------------------
+
+(deftest chained-call-roundtrip
+  (testing "f(x)(y) → ((f x) y)"
+    (is (= '[(( f x) y)] (core/beme->forms "f(x)(y)"))))
+  (testing "f(x)(y)(z) → (((f x) y) z)"
+    (is (= '[(((f x) y) z)] (core/beme->forms "f(x)(y)(z)"))))
+  (testing "chaining with begin/end"
+    (is (= '[((f x) y)] (core/beme->forms "f(x) begin y end"))))
+  (testing "printer output roundtrips"
+    (let [form '((f x) y)
+          printed (p/print-form form)
+          re-read (first (core/beme->forms printed))]
+      (is (= "f(x)(y)" printed))
+      (is (= form re-read))))
+  (testing "chaining does not happen inside quoted lists"
+    (is (= '[(quote (a (b) (c d)))] (core/beme->forms "'(a(b) (c d))")))))

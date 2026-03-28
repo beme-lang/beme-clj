@@ -260,10 +260,9 @@
   (testing "do([1 2 3] (4 5)) — vector eats the ("
     (is (= '[(do ([1 2 3] 4 5))] (core/beme->forms "do([1 2 3] (4 5))")))))
 
-(deftest no-eating-after-non-head
-  (testing "do(42 (foo)) — 42 does not eat, but foo is a bare-paren error"
-    (is (thrown? #?(:clj Exception :cljs js/Error)
-                 (core/beme->forms "do(42 (foo))")))))
+(deftest chained-call-after-non-head
+  (testing "do(42 (foo)) — 42(foo) chains to (42 foo) via call-chain"
+    (is (= '[(do (42 foo))] (core/beme->forms "do(42 (foo))")))))
 
 (deftest vector-followed-by-symbol-call
   (testing "do([1 2 3] foo(x)) — vector does not eat symbol call"
