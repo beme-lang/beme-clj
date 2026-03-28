@@ -5,4 +5,7 @@
             [clojure.java.io :as io]))
 
 ;; The .beme file's ns form re-opens this namespace and adds its own requires.
-(beme-run/run-string (slurp (io/resource "beme/alpha/runtime/cli.beme")))
+(let [r (io/resource "beme/alpha/runtime/cli.beme")]
+  (when-not r
+    (throw (ex-info "cli.beme not found on classpath — check that src/ is in :paths" {})))
+  (beme-run/run-string (slurp r)))
