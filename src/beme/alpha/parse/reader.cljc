@@ -480,6 +480,9 @@
                                 (select-keys nxt [:line :col])))
             (pexpect! p :close-paren)
             (let [params (find-percent-params body)
+                  _ (when (contains? params 0)
+                      (errors/beme-error "%0 is not a valid parameter — use %1 or % for the first argument"
+                                         (select-keys tok [:line :col])))
                   param-vec (build-anon-fn-params params)
                   body' (normalize-bare-percent body)]
               (list 'fn param-vec body'))))

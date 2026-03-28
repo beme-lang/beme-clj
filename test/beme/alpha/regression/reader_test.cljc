@@ -323,6 +323,23 @@
     (is (= '[(fn [] c)] (core/beme->forms "#(#_ #_ a b c)")))))
 
 ;; ---------------------------------------------------------------------------
+;; Scar tissue: %0 in #() silently produced (fn [] (inc %0)) with %0 as
+;; free symbol. Clojure rejects %0; beme must too.
+;; ---------------------------------------------------------------------------
+
+(deftest percent-zero-rejected-in-anon-fn
+  (testing "#(inc(%0)) — %0 is not a valid param, must error"
+    (is (thrown-with-msg? #?(:clj Exception :cljs js/Error)
+          #"%0 is not a valid parameter"
+          (core/beme->forms "#(inc(%0))"))))
+  (testing "#(+(%0 %1)) — %0 mixed with valid params, must error"
+    (is (thrown-with-msg? #?(:clj Exception :cljs js/Error)
+          #"%0 is not a valid parameter"
+          (core/beme->forms "#(+(%0 %1))"))))
+  (testing "%1 and higher still work"
+    (is (= '[(fn [%1] (inc %1))] (core/beme->forms "#(inc(%1))")))))
+
+;; ---------------------------------------------------------------------------
 ;; Scar tissue: bare % and numbered %N mixed in #() forms.
 ;; ---------------------------------------------------------------------------
 
