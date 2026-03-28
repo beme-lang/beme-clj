@@ -4,21 +4,24 @@
 [![Clojure](https://img.shields.io/badge/Clojure-JVM%20%7C%20Babashka%20%7C%20ClojureScript-blue?logo=clojure&logoColor=white)](https://clojure.org)
 [![License](https://img.shields.io/github/license/beme-lang/beme-clj)](LICENSE)
 
-```
-;; full — begin/end for structure, parens for one-liners
-defn begin stars [owner repo]
+```clojure
+;; examples/stars.beme — bb beme run examples/stars.beme
+require('[cheshire.core :as json])
 
+defn begin stars [owner repo]
   let begin
     [
-      url  str("https://api.github.com/repos/" owner "/" repo)
-      resp slurp(url)
-      data json/read-str(resp :key-fn keyword)
+      url   str("https://api.github.com/repos/" owner "/" repo)
+      resp  slurp(url)
+      data  json/parse-string(resp true)
       count :stargazers_count(data)
     ]
 
     println(str(owner "/" repo ": " count " ⭐"))
   end
 end
+
+stars("beme-lang" "beme-clj")
 ```
 
 ## Why
@@ -39,7 +42,7 @@ Everything else is Clojure.
 Add to `deps.edn`:
 
 ```clojure
-io.github.beme-lang/beme-clj {:git/tag "v0.3.0" :git/sha "a3767c4"}
+io.github.beme-lang/beme-clj {:mvn/version "0.4.0-alpha"}
 ```
 
 Or clone and use directly:
