@@ -1,0 +1,21 @@
+[submodule "test/vendor/core.async"]
+	path = test/vendor/core.async
+	url = https://github.com/clojure/core.async.git
+[submodule "test/vendor/specter"]
+	path = test/vendor/specter
+	url = https://github.com/redplanetlabs/specter.git
+[submodule "test/vendor/malli"]
+	path = test/vendor/malli
+	url = https://github.com/metosin/malli.git
+[submodule "test/vendor/ring"]
+	path = test/vendor/ring
+	url = https://github.com/ring-clojure/ring.git
+[submodule "test/vendor/clj-http"]
+	path = test/vendor/clj-http
+	url = https://github.com/dakrone/clj-http.git
+[submodule "test/vendor/medley"]
+	path = test/vendor/medley
+	url = https://github.com/weavejester/medley.git
+[submodule "test/vendor/hiccup"]
+	path = test/vendor/hiccup
+	url = https://github.com/weavejester/hiccup.git
