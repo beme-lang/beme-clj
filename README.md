@@ -35,6 +35,8 @@ while preserving Clojure's semantics exactly.
 
 **Rule 2** (optional) — `begin`/`end` instead of parens: `f begin x y end` => `(f x y)`
 
+**Escape hatch** — `'(...)` and `` `(...) `` drop back to S-expression syntax inside: `'(f (g x))` is `(quote (f (g x)))`, not a call. When you need raw Clojure forms, just quote them.
+
 Everything else is Clojure.
 
 ## Installation
