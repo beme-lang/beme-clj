@@ -255,6 +255,35 @@
     (is (= :char (:type (first (tokenize "\\o101")))))))
 
 ;; ---------------------------------------------------------------------------
+;; Incomplete \uXX at EOF — malformed :char token instead of :incomplete.
+;; Bug: \u followed by 1-3 hex digits at EOF produced a token that failed
+;; at resolve time with :invalid, preventing REPL continuation.
+;; ---------------------------------------------------------------------------
+
+(deftest partial-unicode-escape-eof-incomplete
+  (testing "\\u0 at EOF signals :incomplete"
+    (let [ex (try (core/beme->forms "\\u0")
+                  (catch #?(:clj Exception :cljs :default) e e))]
+      (is (:incomplete (ex-data ex)))))
+  (testing "\\u00 at EOF signals :incomplete"
+    (let [ex (try (core/beme->forms "\\u00")
+                  (catch #?(:clj Exception :cljs :default) e e))]
+      (is (:incomplete (ex-data ex)))))
+  (testing "\\u000 at EOF signals :incomplete"
+    (let [ex (try (core/beme->forms "\\u000")
+                  (catch #?(:clj Exception :cljs :default) e e))]
+      (is (:incomplete (ex-data ex)))))
+  (testing "\\u alone at EOF is complete (character u)"
+    (is (= [\u] (core/beme->forms "\\u"))))
+  (testing "\\u0041 is complete"
+    (is (= [\A] (core/beme->forms "\\u0041"))))
+  (testing "\\u00g1 is still :invalid (not :incomplete)"
+    (let [ex (try (core/beme->forms "\\u00g1")
+                  (catch #?(:clj Exception :cljs :default) e e))]
+      (is (some? ex))
+      (is (not (:incomplete (ex-data ex)))))))
+
+;; ---------------------------------------------------------------------------
 ;; Bare backslash at EOF missing :incomplete.
 ;; Bug: lone \ at EOF produced a hard error without :incomplete in ex-data.
 ;; ---------------------------------------------------------------------------

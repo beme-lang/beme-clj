@@ -139,12 +139,17 @@
                      (if (and (< n 4) (not (seof? sc)) (hex-digit? (speek sc)))
                        (do (sb-append! sb (sadvance! sc)) (recur (inc n)))
                        n))]
-      (when (and (< consumed 4) (not (seof? sc))
-                 (not (whitespace? (speek sc)))
-                 (not (#{\( \) \[ \] \{ \} \;} (speek sc))))
-        (errors/beme-error
-          (str "Invalid unicode escape: expected 4 hex digits after \\u, got " consumed)
-          loc)))
+      (when (< consumed 4)
+        (if (and (pos? consumed) (seof? sc))
+          (errors/beme-error
+            (str "Incomplete unicode escape: expected 4 hex digits after \\u, got " consumed)
+            (assoc loc :incomplete true))
+          (when (and (not (seof? sc))
+                     (not (whitespace? (speek sc)))
+                     (not (#{\( \) \[ \] \{ \} \;} (speek sc))))
+            (errors/beme-error
+              (str "Invalid unicode escape: expected 4 hex digits after \\u, got " consumed)
+              loc)))))
     ;; \oXXX — octal escape: up to 3 octal digits required, at least 1
     (= ch \o)
     (let [consumed (loop [n 0]
