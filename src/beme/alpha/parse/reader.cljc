@@ -510,6 +510,18 @@
     (vary-meta form assoc :ws ws)
     form))
 
+(defn- parse-call-chain
+  "After parsing a form, check for chained call openers: f(x)(y) → ((f x) y).
+   Handles arbitrary depth: f(x)(y)(z) → (((f x) y) z).
+   Skipped in clj-mode (inside quoted lists) and for discard sentinels."
+  [p form]
+  (if (and (not @(:clj-mode p))
+           (not (discard-sentinel? form))
+           (call-opener? (ppeek p)))
+    (let [args (parse-call-args p)]
+      (recur p (apply list form args)))
+    form))
+
 (defn- parse-form
   "Parse a single beme form. Attaches :ws (leading whitespace/comments)
    from the token as metadata on the resulting form."
@@ -521,7 +533,8 @@
         (errors/beme-error (str "Maximum nesting depth (" max-depth ") exceeded — input is too deeply nested")
                            (merge {:depth d} (when-let [tok (ppeek p)]
                                                (select-keys tok [:line :col])))))
-      (attach-ws (parse-form-base p) ws)
+      (let [form (parse-form-base p)]
+        (attach-ws (parse-call-chain p form) ws))
       (finally
         (vswap! (:depth p) dec)))))
 
