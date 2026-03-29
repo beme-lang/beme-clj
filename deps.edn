@@ -20,6 +20,7 @@
                           "-d" "test"
                           "-r" ".*-test$"
                           "-x" "node"]}
-  :build {:deps {io.github.clojure/tools.build {:mvn/version "0.10.7"}
+  :build {:extra-paths ["src"]
+          :deps {io.github.clojure/tools.build {:mvn/version "0.10.7"}
                  slipset/deps-deploy {:mvn/version "0.2.2"}}
           :ns-default build}}}
