@@ -12,19 +12,56 @@
 ;; Helpers (shared pattern with dogfood_test.clj)
 ;; ---------------------------------------------------------------------------
 
+(defn- extract-require-aliases
+  "Extract :as aliases from a (ns ...) form.
+   Returns {alias-sym ns-sym}, e.g. {ws ring.websocket}."
+  [ns-form]
+  (when (and (seq? ns-form) (= 'ns (first ns-form)))
+    (into {}
+      (for [clause (filter seq? ns-form)
+            :when (= :require (first clause))
+            spec (rest clause)
+            :when (and (vector? spec) (some #{:as} spec))
+            :let [as-idx (.indexOf ^java.util.List spec :as)]
+            :when (< (inc as-idx) (count spec))]
+        [(nth spec (inc as-idx)) (first spec)]))))
+
 (defn- read-clj-forms
   "Read all Clojure forms from a .clj/.cljc file using Clojure's reader.
+   Sets up a temp namespace with aliases from the ns form so :: keywords resolve.
    Returns vector of {:form f} or {:read-error msg}."
   [path]
-  (binding [*read-eval* false]
-    (let [rdr (java.io.PushbackReader. (io/reader path))]
-      (loop [forms []]
-        (let [result (try {:form (read {:read-cond :preserve :eof ::eof} rdr)}
-                          (catch Exception e {:read-error (.getMessage e)}))]
-          (cond
-            (:read-error result) (conj forms result)
-            (= (:form result) ::eof) forms
-            :else (recur (conj forms result))))))))
+  ;; First pass: read just the ns form to extract aliases
+  (let [first-form (try
+                     (binding [*read-eval* false]
+                       (read {:read-cond :preserve :eof nil}
+                             (java.io.PushbackReader. (io/reader path))))
+                     (catch Exception _ nil))
+        aliases (or (extract-require-aliases first-form) {})
+        declared-ns (when (and (seq? first-form) (= 'ns (first first-form)))
+                      (second first-form))
+        ;; Create or reuse the declared namespace so :: resolves correctly
+        ns-existed? (when declared-ns (find-ns declared-ns))
+        temp-ns (if declared-ns (create-ns declared-ns) (create-ns (gensym "vendor-rt-")))]
+    (try
+      ;; Set up aliases: create target namespaces and add aliases
+      (doseq [[alias-sym ns-sym] aliases]
+        (create-ns ns-sym)
+        (when-not (get (ns-aliases temp-ns) alias-sym)
+          (.addAlias ^clojure.lang.Namespace temp-ns alias-sym (the-ns ns-sym))))
+      ;; Second pass: read all forms with namespace context
+      (binding [*read-eval* false *ns* temp-ns]
+        (let [rdr (java.io.PushbackReader. (io/reader path))]
+          (loop [forms []]
+            (let [result (try {:form (read {:read-cond :preserve :eof ::eof} rdr)}
+                              (catch Exception e {:read-error (.getMessage e)}))]
+              (cond
+                (:read-error result) (conj forms result)
+                (= (:form result) ::eof) forms
+                :else (recur (conj forms result)))))))
+      (finally
+        (when (and declared-ns (not ns-existed?))
+          (remove-ns declared-ns))))))
 
 (defn- form-name
   "Extract a readable name for a form."
