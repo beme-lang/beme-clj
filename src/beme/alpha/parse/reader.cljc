@@ -71,6 +71,7 @@
    :open-set     "#{"
    :open-anon-fn "#("
    :symbol       "symbol"
+   :escaped-symbol "symbol"
    :keyword      "keyword"
    :number       "number"
    :string       "string"
@@ -306,7 +307,7 @@
     (when-not tok
       (errors/beme-error "Unexpected end of input — expected a form" (error-data p (assoc (plast-loc p) :incomplete true))))
     (case (:type tok)
-      :symbol
+      (:symbol :escaped-symbol)
       (let [s (:value tok)]
         (padvance! p)
         (case s

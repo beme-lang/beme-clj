@@ -697,6 +697,30 @@
       (is (true? (:dynamic (meta (first f1)))))
       (is (= 'String (:tag (meta (first f1))))))))
 
+;; ---------------------------------------------------------------------------
+;; Escaped symbols: /begin/ and /end/
+;; ---------------------------------------------------------------------------
+
+(deftest roundtrip-escaped-begin-end
+  (testing "begin as call head roundtrips via /begin/"
+    (let [[f1 f2 text] (roundtrip-forms "/begin/(x y)")]
+      (is (= f1 f2))
+      (is (= '[(begin x y)] f1))
+      (is (re-find #"/begin/" text))))
+  (testing "end as argument roundtrips via /end/"
+    (let [[f1 f2 text] (roundtrip-forms "foo(/end/)")]
+      (is (= f1 f2))
+      (is (= '[(foo end)] f1))
+      (is (re-find #"/end/" text))))
+  (testing "begin and end as arguments roundtrip"
+    (let [[f1 f2 _] (roundtrip-forms "list(/begin/ /end/)")]
+      (is (= f1 f2))
+      (is (= '[(list begin end)] f1))))
+  (testing "non-reserved escaped symbol roundtrips (lossy — slashes stripped)"
+    (let [forms1 (core/beme->forms "/foo/(x)")
+          forms2 (core/beme->forms "foo(x)")]
+      (is (= forms1 forms2)))))
+
 (deftest roundtrip-some-threading
   (testing "some-> roundtrips"
     (let [[f1 f2 _] (roundtrip-forms "some->(m :a :b)")]

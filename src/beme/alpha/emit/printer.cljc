@@ -186,8 +186,12 @@
     (set? form)
     (str "#{" (str/join " " (map print-form form)) "}")
 
-    ;; symbol
-    (symbol? form) (str form)
+    ;; symbol — escape begin/end to avoid delimiter conflict
+    (symbol? form)
+    (let [n (name form)]
+      (if (and (nil? (namespace form)) (#{"begin" "end"} n))
+        (str "/" n "/")
+        (str form)))
 
     ;; keyword
     (keyword? form)

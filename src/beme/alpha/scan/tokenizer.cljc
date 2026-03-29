@@ -402,6 +402,28 @@
               (conj! tokens (tok-at sc :number (str sign num) loc))
               (recur))
 
+            ;; /symbol/ — escaped symbol literal (bypasses begin/end reservation)
+            ;; Lookahead: only trigger when closing / exists before whitespace/delimiters/EOF
+            (and (= ch \/)
+                 (letter? (speek sc 1))
+                 (loop [i 2]
+                   (let [c (speek sc i)]
+                     (cond
+                       (nil? c) false
+                       (= c \/) true
+                       (or (whitespace? c)
+                           (#{\( \) \[ \] \{ \} \" \; \@ \^ \` \~ \\} c)) false
+                       :else (recur (inc i))))))
+            (do (sadvance! sc) ; consume opening /
+                (let [sb (make-sb)]
+                  (loop []
+                    (if (= (speek sc) \/)
+                      (do (sadvance! sc) ; consume closing /
+                          (conj! tokens (tok-at sc :escaped-symbol (sb-str sb) loc)))
+                      (do (sb-append! sb (sadvance! sc))
+                          (recur)))))
+                (recur))
+
             ;; symbol (includes operators like +, -, ->, ->>, >=, etc.)
             (symbol-start? ch)
             (let [sym (read-symbol-str sc)]

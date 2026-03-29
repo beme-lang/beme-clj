@@ -281,6 +281,43 @@
     (testing "trailing whitespace in metadata"
       (is (= "  " (:trailing-ws (meta tokens)))))))
 
+;; ---------------------------------------------------------------------------
+;; Escaped symbols: /symbol/
+;; ---------------------------------------------------------------------------
+
+(deftest tokenize-escaped-symbol
+  (testing "/begin/ produces :escaped-symbol token"
+    (let [tok (first (tokenize-raw "/begin/"))]
+      (is (= :escaped-symbol (:type tok)))
+      (is (= "begin" (:value tok)))))
+  (testing "/end/ produces :escaped-symbol token"
+    (let [tok (first (tokenize-raw "/end/"))]
+      (is (= :escaped-symbol (:type tok)))
+      (is (= "end" (:value tok)))))
+  (testing "/foo/ produces :escaped-symbol for arbitrary name"
+    (let [tok (first (tokenize-raw "/foo/"))]
+      (is (= :escaped-symbol (:type tok)))
+      (is (= "foo" (:value tok)))))
+  (testing "/begin/ in context: def(/begin/ 42)"
+    (let [tokens (tokenize "def(/begin/ 42)")]
+      (is (= :escaped-symbol (:type (nth tokens 2))))
+      (is (= "begin" (:value (nth tokens 2))))))
+  (testing "bare / still tokenizes as symbol"
+    (let [tok (first (tokenize "/"))]
+      (is (= :symbol (:type tok)))
+      (is (= "/" (:value tok)))))
+  (testing "/(x) still tokenizes as division call"
+    (let [tokens (tokenize "/(x)")]
+      (is (= :symbol (:type (first tokens))))
+      (is (= "/" (:value (first tokens))))))
+  (testing "/begin without closing slash falls through to symbol"
+    (let [tok (first (tokenize-raw "/begin"))]
+      (is (= :symbol (:type tok)))))
+  (testing "a/b/c still produces two tokens (no false escaped-symbol)"
+    (let [tokens (tokenize-raw "a/b/c")]
+      (is (= 2 (count tokens)))
+      (is (= "a/b" (:value (first tokens)))))))
+
 (deftest whitespace-attachment-empty
   (let [tokens (tokenizer/attach-whitespace [] "  \n  ")]
     (testing "whitespace-only source stored as trailing"
