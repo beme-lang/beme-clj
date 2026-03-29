@@ -180,8 +180,9 @@
         dir-path (str vendor-dir "/" project-name)]
     `(deftest ~test-sym
        (let [dir# (io/file ~dir-path)]
-         (if-not (.isDirectory dir#)
-           (println (format "SKIP %s — submodule not initialized" ~project-name))
+         (if-not (and (.isDirectory dir#)
+                      (seq (find-clj-files dir#)))
+           (println (format "SKIP %s — submodule not initialized (run: git submodule update --init)" ~project-name))
            (let [result# (test-project dir#)]
              (report-project result#)
              (is (pos? (:total-forms result#))
