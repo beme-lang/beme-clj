@@ -11,19 +11,16 @@
 (defn- whitespace? [ch]
   (and ch (or (= ch \space) (= ch \tab) (= ch \newline) (= ch \return) (= ch \,))))
 
-(defn- char-code [ch]
-  #?(:clj (int ch) :cljs (.charCodeAt ch 0)))
-
-;; Named character-code constants — replace magic ASCII numbers
-(def ^:private code-0 (char-code \0))
-(def ^:private code-7 (char-code \7))
-(def ^:private code-9 (char-code \9))
-(def ^:private code-A (char-code \A))
-(def ^:private code-F (char-code \F))
-(def ^:private code-Z (char-code \Z))
-(def ^:private code-a (char-code \a))
-(def ^:private code-f (char-code \f))
-(def ^:private code-z (char-code \z))
+(def ^:private char-code source/char-code)
+(def ^:private code-0 source/code-0)
+(def ^:private code-7 source/code-7)
+(def ^:private code-9 source/code-9)
+(def ^:private code-A source/code-A)
+(def ^:private code-F source/code-F)
+(def ^:private code-Z source/code-Z)
+(def ^:private code-a source/code-a)
+(def ^:private code-f source/code-f)
+(def ^:private code-z source/code-z)
 
 (defn- digit? [ch]
   (and ch (let [c (char-code ch)] (and (>= c code-0) (<= c code-9)))))

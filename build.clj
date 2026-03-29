@@ -1,9 +1,10 @@
 (ns build
   (:require [clojure.tools.build.api :as b]
-            [deps-deploy.deps-deploy :as dd]))
+            [deps-deploy.deps-deploy :as dd]
+            [beme.alpha.version]))
 
 (def lib 'io.github.beme-lang/beme-clj)
-(def version "0.4.0-alpha")
+(def version beme.alpha.version/version)
 (def class-dir "target/classes")
 (def jar-file (format "target/%s-%s.jar" (name lib) version))
 (def basis (delay (b/create-basis {:project "deps.edn"})))

@@ -728,3 +728,26 @@
   (testing "some->> roundtrips"
     (let [[f1 f2 _] (roundtrip-forms "some->>(x str inc)")]
       (is (= f1 f2)))))
+
+;; ---------------------------------------------------------------------------
+;; CRLF end-to-end: \r\n line endings produce correct forms and roundtrip
+;; ---------------------------------------------------------------------------
+
+(deftest crlf-pipeline-produces-correct-forms
+  (testing "CRLF multi-line begin/end block"
+    (let [crlf-forms (core/beme->forms "defn begin foo\r\n  [x]\r\n  +(x 1)\r\nend")
+          lf-forms   (core/beme->forms "defn begin foo\n  [x]\n  +(x 1)\nend")]
+      (is (= crlf-forms lf-forms))))
+  (testing "CRLF multiple top-level forms"
+    (let [crlf-forms (core/beme->forms "println(\"hello\")\r\n+(1 2)")
+          lf-forms   (core/beme->forms "println(\"hello\")\n+(1 2)")]
+      (is (= 2 (count crlf-forms)))
+      (is (= crlf-forms lf-forms)))))
+
+(deftest crlf-roundtrip
+  (testing "CRLF source survives read→print→re-read"
+    (let [[f1 f2 _] (roundtrip-forms "defn begin foo\r\n  [x]\r\n  +(x 1)\r\nend")]
+      (is (= f1 f2))))
+  (testing "CRLF in let binding"
+    (let [[f1 f2 _] (roundtrip-forms "let([x 1\r\n     y 2]\r\n  +(x y))")]
+      (is (= f1 f2)))))

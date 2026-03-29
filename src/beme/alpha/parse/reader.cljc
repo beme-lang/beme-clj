@@ -3,7 +3,8 @@
    Transforms beme tokens into Clojure forms."
   (:require [clojure.string :as str]
             [beme.alpha.errors :as errors]
-            [beme.alpha.parse.resolve :as resolve]))
+            [beme.alpha.parse.resolve :as resolve]
+            [beme.alpha.scan.source :as source]))
 
 ;; Sentinel for #_ discard. Contract:
 ;; - Returned by `parse-form-base` (via `:discard`) when the parsed form was a #_ discard
@@ -201,12 +202,6 @@
 ;; #() anonymous function — % param helpers
 ;; ---------------------------------------------------------------------------
 
-(defn- char-code* [ch]
-  #?(:clj (int ch) :cljs (.charCodeAt ch 0)))
-
-(def ^:private code-0* (char-code* \0))
-(def ^:private code-9* (char-code* \9))
-
 (defn- percent-param-type
   "If sym is a % parameter symbol, return its type: :bare, :rest, or the integer N."
   [sym]
@@ -217,7 +212,7 @@
         (= n "%&") :rest
         (and (str/starts-with? n "%")
              (> (count n) 1)
-             (every? #(let [c (char-code* %)] (and (>= c code-0*) (<= c code-9*))) (seq (subs n 1))))
+             (every? #(let [c (source/char-code %)] (and (>= c source/code-0) (<= c source/code-9))) (seq (subs n 1))))
         (#?(:clj Long/parseLong :cljs #(js/parseInt % 10)) (subs n 1))
         :else nil))))
 

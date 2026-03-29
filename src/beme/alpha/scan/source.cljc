@@ -10,6 +10,29 @@
    both \\n and \\r\\n). The two models agree for LF sources but diverge
    for CRLF. See format-error for how the bridge is handled.")
 
+;; ---------------------------------------------------------------------------
+;; Character code utilities (shared by tokenizer and reader)
+;; ---------------------------------------------------------------------------
+
+(defn char-code
+  "Platform-portable integer code point of a character."
+  [ch]
+  #?(:clj (int ch) :cljs (.charCodeAt ch 0)))
+
+(def code-0 (char-code \0))
+(def code-7 (char-code \7))
+(def code-9 (char-code \9))
+(def code-A (char-code \A))
+(def code-F (char-code \F))
+(def code-Z (char-code \Z))
+(def code-a (char-code \a))
+(def code-f (char-code \f))
+(def code-z (char-code \z))
+
+;; ---------------------------------------------------------------------------
+;; Source position
+;; ---------------------------------------------------------------------------
+
 (defn line-col->offset
   "Convert 1-indexed line/col to a 0-indexed character offset in source.
    Uses the scanner line model: only \\n is a line break, \\r occupies a column.

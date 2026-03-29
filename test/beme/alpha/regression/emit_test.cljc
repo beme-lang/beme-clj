@@ -161,7 +161,6 @@
 ;; Bug: pp-call-smart always printed head-line args flat.
 ;; ---------------------------------------------------------------------------
 
-#?(:clj
 (deftest pprint-head-line-args-respect-width
   (testing "long if-condition falls back to body when it exceeds width"
     (let [form '(if (and (> x 100) (< y 200) (not= z 0)) (body1) (body2))
@@ -175,20 +174,19 @@
     (let [form '(if (> x 0) (do-something-with x) (do-something-else y))
           result (pprint/pprint-form form {:width 40})]
       (is (re-find #"if begin >" result)
-          "short condition should stay on head line")))))
+          "short condition should stay on head line"))))
 
 ;; ---------------------------------------------------------------------------
 ;; Scar tissue: pprint map value column must use actual key width.
 ;; ---------------------------------------------------------------------------
 
-#?(:clj
 (deftest pprint-map-value-column-uses-actual-key-width
   (testing "map value indentation based on actual key width, not flat width"
     (let [form {:k '(some-long-function arg1 arg2 arg3 arg4 arg5)}
           result (pprint/pprint-form form {:width 40})
           lines (str/split-lines result)]
       (is (some? result))
-      (is (> (count lines) 1) "should be multi-line")))))
+      (is (> (count lines) 1) "should be multi-line"))))
 
 ;; ---------------------------------------------------------------------------
 ;; Bug: pp-map underestimated val-col for single-line keys.
@@ -196,7 +194,6 @@
 ;; they actually had, printing flat when they should break.
 ;; ---------------------------------------------------------------------------
 
-#?(:clj
 (deftest pprint-map-value-column-includes-indent
   (testing "map value breaks when key + indent + value exceed width"
     ;; Map is multi-line (flat > width 30). Inside, inner-col = 2.
@@ -211,7 +208,7 @@
       (is (> (count lines) 3) "value should break to multi-line")
       (doseq [line lines]
         (is (<= (count line) 34)
-            (str "line exceeds width: " (pr-str line))))))))
+            (str "line exceeds width: " (pr-str line)))))))
 
 ;; ---------------------------------------------------------------------------
 ;; Bug: pprint silently dropped metadata on multi-line call forms.
@@ -323,7 +320,6 @@
              (re-find (first forms) "a\\\"b"))
           "regex behavior should be preserved")))))
 
-#?(:clj
 (deftest pprint-deferred-auto-keyword-not-corrupted
   (testing "::foo preserved at narrow width"
     (is (= "::foo"
@@ -333,8 +329,11 @@
                    (list 'def 'x '(clojure.core/read-string "::long-keyword"))
                    {:width 20})]
       (is (re-find #"::long-keyword" result))
-      (is (not (re-find #"clojure.core/read-string" result)))))
-  (testing ":: keyword roundtrips through pprint"
+      (is (not (re-find #"clojure.core/read-string" result))))))
+
+#?(:clj
+(deftest pprint-deferred-auto-keyword-roundtrip
+  (testing ":: keyword roundtrips through pprint (JVM only — :: resolution)"
     (let [src "def(x ::my-key)"
           forms (core/beme->forms src)
           pprinted (pprint/pprint-forms forms {:width 10})
@@ -349,7 +348,6 @@
 ;; Fix: add explicit dispatch for deref, var, quote-non-seq before call?.
 ;; ---------------------------------------------------------------------------
 
-#?(:clj
 (deftest pprint-preserves-deref-sugar
   (testing "@atom preserved at narrow width"
     (let [form (list 'clojure.core/deref 'my-very-long-atom-name)
@@ -361,22 +359,20 @@
     (let [form (list 'clojure.core/deref (list 'reset! 'state 'val))
           result (pprint/pprint-form form {:width 10})]
       (is (str/starts-with? result "@"))
-      (is (= (list form) (core/beme->forms result)))))))
+      (is (= (list form) (core/beme->forms result))))))
 
-#?(:clj
 (deftest pprint-preserves-var-sugar
   (testing "#'sym preserved at narrow width"
     (let [form (list 'var 'some.ns/my-var)
           result (pprint/pprint-form form {:width 5})]
       (is (str/starts-with? result "#'"))
       (is (not (str/includes? result "var begin")))
-      (is (= (list form) (core/beme->forms result)))))))
+      (is (= (list form) (core/beme->forms result))))))
 
-#?(:clj
 (deftest pprint-preserves-quote-sugar
   (testing "'sym preserved at narrow width"
     (let [form (list 'quote 'my-long-symbol-name)
           result (pprint/pprint-form form {:width 5})]
       (is (str/starts-with? result "'"))
       (is (not (str/includes? result "quote begin")))
-      (is (= (list form) (core/beme->forms result)))))))
+      (is (= (list form) (core/beme->forms result))))))

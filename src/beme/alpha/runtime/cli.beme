@@ -5,6 +5,7 @@ ns begin beme.alpha.runtime.cli
   :require begin
     [beme.alpha.core :as core]
     [beme.alpha.errors :as errors]
+    [beme.alpha.version :as v]
     [beme.alpha.runtime.run :as beme-run]
     [beme.alpha.runtime.repl :as repl]
     [clojure.java.io :as io]
@@ -213,7 +214,7 @@ defn begin format-cmd
   end
 end
 
-defn(version [_] println("beme 0.4.0-alpha"))
+defn(version [_] println(str("beme " v/version)))
 
 defn begin help
   [_]
