@@ -11,9 +11,11 @@ while preserving Clojure's semantics exactly.
 
 **Rule 1** — head outside the parens: `f(x y)` => `(f x y)`
 
-**Rule 2** (optional) — `begin`/`end` instead of parens: `f begin x y end` => `(f x y)`
+**Rule 2** (optional) — `begin`/`end` instead of parens: `f begin x y end` => `(f x y)`. You never need `begin`/`end` — everything can be written with Rule 1 alone. They exist for readability in multi-line blocks.
 
 **Escape hatch** — `'(...)` and `` `(...) `` drop back to S-expression syntax inside: `'(f (g x))` is `(quote (f (g x)))`, not a call. When you need raw Clojure forms, just quote them.
+
+`begin` and `end` are reserved words. If you need them as symbols, escape with slashes: `/begin/` and `/end/`. The printer does this automatically for roundtrip fidelity.
 
 Everything else is Clojure.
 
