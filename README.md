@@ -44,7 +44,7 @@ stars("beme-lang" "beme-clj")
 Add to `deps.edn`:
 
 ```clojure
-io.github.beme-lang/beme-clj {:mvn/version "0.4.0-alpha"}
+io.github.beme-lang/beme-clj {:mvn/version "0.5.0-alpha"}
 ```
 
 Or clone and use directly:

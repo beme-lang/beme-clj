@@ -541,3 +541,36 @@
     (is (thrown-with-msg? #?(:clj Exception :cljs js/Error)
           #"Pipeline :source"
           (pipeline/group {:raw-tokens [] :source 42})))))
+
+;; ---------------------------------------------------------------------------
+;; Verify begin/end symbols inside opaque regions are treated as raw text,
+;; not as beme delimiters. The grouper collapses the entire region into a
+;; single -raw token; the reader then delegates to Clojure's reader.
+;; ---------------------------------------------------------------------------
+
+(deftest begin-end-inside-reader-conditional
+  (testing "begin/end symbols inside #?() are opaque raw text"
+    (let [tokens (tokenize "#?(:clj begin :cljs end)")]
+      (is (= 1 (count tokens)))
+      (is (= :reader-cond-raw (:type (first tokens))))
+      (is (= "#?(:clj begin :cljs end)" (:value (first tokens))))))
+  #?(:clj
+  (testing "begin/end inside #?() parse without error on JVM"
+    (is (some? (core/beme->forms "#?(:clj begin :cljs end)"))))))
+
+#?(:clj
+(deftest begin-end-inside-syntax-quote
+  (testing "begin/end symbols inside `() are opaque raw text"
+    (let [tokens (tokenize "`(begin end)")]
+      (is (= 1 (count tokens)))
+      (is (= :syntax-quote-raw (:type (first tokens))))
+      (is (= "`(begin end)" (:value (first tokens))))))
+  (testing "`(begin end) parses without error"
+    (is (some? (core/beme->forms "`(begin end)"))))))
+
+(deftest escaped-begin-end-inside-reader-conditional
+  (testing "/begin/ and /end/ escaped symbols inside #?() are opaque raw text"
+    (let [tokens (tokenize "#?(:clj /begin/ :cljs /end/)")]
+      (is (= 1 (count tokens)))
+      (is (= :reader-cond-raw (:type (first tokens))))
+      (is (= "#?(:clj /begin/ :cljs /end/)" (:value (first tokens)))))))

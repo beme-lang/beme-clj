@@ -295,10 +295,6 @@
                     (and (call? form) printer/*clj-mode*)
                     (pp-clj-list form col width)
 
-                    ;; Empty list in clj-mode
-                    (and (seq? form) (empty? form) printer/*clj-mode*)
-                    "()"
-
                     ;; Calls — the main case (beme mode)
                     (call? form)
                     (pp-call-smart form col width)

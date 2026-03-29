@@ -137,6 +137,60 @@
 ;; Composite tokens carry correct :end-line/:end-col from the closing delimiter
 ;; ---------------------------------------------------------------------------
 
+;; ---------------------------------------------------------------------------
+;; Error paths: unclosed opaque regions, mismatched delimiters
+;; ---------------------------------------------------------------------------
+
+(deftest group-unclosed-reader-conditional
+  (testing "#?( without closing paren throws :incomplete"
+    (let [raw (tokenizer/tokenize "#?(")
+          e (try (grouper/group-tokens raw "#?(")
+                 nil
+                 (catch #?(:clj Exception :cljs :default) e e))]
+      (is (some? e))
+      (is (:incomplete (ex-data e)))))
+  (testing "#?(:clj 1 without close throws :incomplete"
+    (let [raw (tokenizer/tokenize "#?(:clj 1")
+          e (try (grouper/group-tokens raw "#?(:clj 1")
+                 nil
+                 (catch #?(:clj Exception :cljs :default) e e))]
+      (is (some? e))
+      (is (:incomplete (ex-data e))))))
+
+(deftest group-unclosed-namespaced-map
+  (testing "#:ns{ without closing brace throws :incomplete"
+    (let [raw (tokenizer/tokenize "#:ns{")
+          e (try (grouper/group-tokens raw "#:ns{")
+                 nil
+                 (catch #?(:clj Exception :cljs :default) e e))]
+      (is (some? e))
+      (is (:incomplete (ex-data e))))))
+
+(deftest group-unclosed-syntax-quote
+  (testing "`( without close throws :incomplete"
+    ;; backtick at EOF errors during tokenization, but `( is valid tokens
+    (let [raw (tokenizer/tokenize "`(a")
+          e (try (grouper/group-tokens raw "`(a")
+                 nil
+                 (catch #?(:clj Exception :cljs :default) e e))]
+      (is (some? e))
+      (is (:incomplete (ex-data e))))))
+
+(deftest group-multiple-opaque-regions-in-sequence
+  (testing "two consecutive reader conditionals both collapse"
+    (let [tokens (group "#?(:clj 1) #?(:cljs 2)")]
+      (is (= 2 (count tokens)))
+      (is (every? #(= :reader-cond-raw (:type %)) tokens))))
+  (testing "reader conditional followed by namespaced map"
+    (let [tokens (group "#?(:clj 1) #:ns{:a 1}")]
+      (is (= 2 (count tokens)))
+      (is (= :reader-cond-raw (:type (first tokens))))
+      (is (= :namespaced-map-raw (:type (second tokens)))))))
+
+;; ---------------------------------------------------------------------------
+;; Composite tokens carry correct :end-line/:end-col from the closing delimiter
+;; ---------------------------------------------------------------------------
+
 (deftest group-composite-end-position
   (testing "#?(...) end position spans to closing paren"
     (let [tokens (group "#?(:clj 1)")]
