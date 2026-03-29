@@ -50,7 +50,17 @@ try begin
 end
 ```
 
-**`end` is reserved inside begin blocks.** Inside a `begin` block, the symbol `end` closes the block — it cannot appear as a data value. Outside begin blocks, `end` is a normal symbol.
+**`begin` and `end` are reserved words.** The reader treats `begin` as a call opener and `end` as a call closer. To use them as ordinary symbols, escape with slashes: `/begin/`, `/end/`.
+
+**`/symbol/` escaping.** Wrapping a name in slashes produces a literal symbol, bypassing reserved-word interpretation:
+
+```
+def(/begin/ 42)    ;; → (def begin 42)
+foo(/end/)         ;; → (foo end)
+/begin/(x y)       ;; → (begin x y) — begin as a call head
+```
+
+The printer automatically emits `/begin/` and `/end/` when printing forms that contain these symbols, so `clj→beme→clj` roundtrips correctly. For non-reserved names, `/foo/` is accepted but lossy — it reads as symbol `foo` and prints back without slashes.
 
 **Printer emits parens.** The printer always outputs `f(args...)` — code written with `begin`/`end` round-trips semantically but not textually.
 

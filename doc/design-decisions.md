@@ -358,12 +358,23 @@ short expressions, parentheses are natural. For multi-line function
 bodies or `try`/`catch` blocks, `begin`/`end` reads more like
 natural-language block structure.
 
-**`end` is reserved inside begin blocks.** The reader treats `end` as a
-closing delimiter when inside a `begin` block. This means `end`
-cannot appear as a data symbol in that context. Outside begin blocks,
-`end` is a normal symbol. This is a deliberate trade-off: the reserved
-word is uncommon in Clojure code, and the alternative (an escape
-mechanism) would add complexity for a rare edge case.
+**`begin` and `end` are reserved words.** The reader treats `begin` as a
+call opener and `end` as a call closer. This means they cannot appear as
+bare symbols. The `/symbol/` escape syntax handles the rare case where
+code needs `begin` or `end` as data: `/begin/` and `/end/` produce the
+literal symbols, bypassing delimiter detection.
+
+The escape uses paired slashes (`/name/`). The tokenizer triggers only
+when `/` is followed by a letter and a closing `/` exists before any
+delimiter or whitespace — so bare `/` (division), `/(x)` (division call),
+and qualified symbols (`a/b/c`) are unaffected. The printer automatically
+emits `/begin/` and `/end/` for these two symbols, ensuring `clj→beme→clj`
+roundtrip fidelity.
+
+For non-reserved names, `/foo/` is accepted but lossy — it reads as
+symbol `foo` and prints back without slashes. This is consistent with
+how `f (x)` and `f(x)` both read identically but only one survives
+printing.
 
 **The printer always emits parentheses.** `begin`/`end` is reader
 convenience — the canonical beme form uses `f(args...)`. This keeps the

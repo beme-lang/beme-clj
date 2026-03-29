@@ -105,6 +105,7 @@ ClojureScript without modification.
 | R25 | `#()` uses beme syntax inside, `%` params → `fn` form | Done |
 | R26 | `run-pipeline` exposes intermediate pipeline state for tooling | Done |
 | R27 | `begin`/`end` as textual call delimiters — `f begin args end` equivalent to `f(args)` | Done |
+| R28 | `/symbol/` escape syntax — `/begin/` and `/end/` produce literal symbols, bypassing delimiter detection | Done |
 
 ### Printer
 
