@@ -19,9 +19,13 @@
 (declare pp)
 
 (defn- flat
-  "Single-line representation of a form (delegates to existing printer)."
+  "Single-line representation of a form (delegates to existing printer).
+   Suppresses surface syntax (infix/block forms) so the pprint begin/end
+   output uses M-expression style, which is required for roundtrip
+   correctness (pprint output is parsed back via beme->forms)."
   [form]
-  (printer/print-form form))
+  (binding [printer/*surface-context* false]
+    (printer/print-form form)))
 
 (defn- indent-str
   "String of n spaces."

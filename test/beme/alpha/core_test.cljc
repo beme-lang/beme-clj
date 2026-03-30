@@ -18,7 +18,7 @@
 
 (deftest forms->beme-test
   (testing "single form"
-    (is (= "+(1 2)" (core/forms->beme ['(+ 1 2)]))))
+    (is (= "1 + 2" (core/forms->beme ['(+ 1 2)]))))
   (testing "multiple forms separated by blank line"
     (is (= "def(x 42)\n\nprintln(x)"
            (core/forms->beme ['(def x 42) '(println x)])))))
@@ -57,7 +57,7 @@
 #?(:clj
 (deftest clj->beme-test
   (testing "converts Clojure source to beme"
-    (is (= "defn(f [x] +(x 1))"
+    (is (= "defn f(x) :\n  x + 1\nend"
            (core/clj->beme "(defn f [x] (+ x 1))"))))
   (testing "multiple forms"
     (is (= "def(x 42)\n\nprintln(x)"

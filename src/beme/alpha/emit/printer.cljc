@@ -9,19 +9,53 @@
 
 (declare print-form)
 
+;; ---------------------------------------------------------------------------
+;; Surface syntax helpers
+;; ---------------------------------------------------------------------------
+
+(def ^:private infix-prec-table
+  {"or" 10 "and" 20
+   "=" 30 "not=" 30 "<" 30 ">" 30 "<=" 30 ">=" 30
+   "+" 40 "-" 40 "*" 50 "/" 50 "mod" 50 "rem" 50})
+
+(defn- infix-prec-of [form]
+  (when (seq? form)
+    (let [h (first form)]
+      (when (symbol? h)
+        (get infix-prec-table (name h))))))
+
+(defn- print-infix-arg
+  "Print a form that is an argument to an infix operator.
+   Wraps in parens if arg is an infix op with lower precedence (to preserve semantics)."
+  [parent-op arg _right?]
+  (let [parent-prec (get infix-prec-table (name parent-op))
+        arg-prec    (infix-prec-of arg)]
+    (if (and arg-prec (< arg-prec parent-prec))
+      (str "(" (print-form arg) ")")
+      (print-form arg))))
+
 ;; When true, lists print in Clojure S-expression style: (f x y)
 ;; instead of beme call style: f(x y). Set by the quote handler
 ;; so that '(...) contains Clojure syntax. Also used by pprint.
 (def ^:dynamic *clj-mode* false)
+
+;; When false, surface syntax (infix operators, block forms) is suppressed.
+;; Set to false when printing M-expression call arguments so that nested
+;; arithmetic like (+ 1 2) prints as +(1 2) not 1 + 2, ensuring roundtrip
+;; correctness (parse-forms-until does not apply Pratt parsing inside calls).
+(def ^:dynamic *surface-context* true)
 
 ;; ---------------------------------------------------------------------------
 ;; Print helpers
 ;; ---------------------------------------------------------------------------
 
 (defn- print-args
-  "Print a sequence of forms separated by spaces."
+  "Print a sequence of forms separated by spaces.
+   Suppresses surface syntax so that nested arithmetic uses M-expression style
+   (e.g. (+ 1 2) → +(1 2) not 1 + 2), ensuring roundtrip correctness."
   [forms]
-  (str/join " " (map print-form forms)))
+  (binding [*surface-context* false]
+    (str/join " " (map print-form forms))))
 
 (defn- percent-param?
   "Is sym a % parameter symbol (%1, %2, %&)?"
@@ -144,6 +178,132 @@
 
           ;; #'var
           (= head 'var) (str "#'" (print-form (second form)))
+
+          ;; --- Surface syntax rendering ---
+          ;; Only applies when *surface-context* is true (not inside M-expression call args).
+
+          ;; Infix binary operators — only in surface context
+          (and *surface-context*
+               (symbol? head)
+               (contains? #{"+" "-" "*" "/" "mod" "rem"
+                             "=" "not=" "<" ">" "<=" ">="
+                             "and" "or"} (name head))
+               (= 3 (count form)))
+          (let [op    (name head)
+                left  (second form)
+                right (nth form 2)
+                left-s  (print-infix-arg head left false)
+                right-s (print-infix-arg head right true)]
+            (str left-s " " op " " right-s))
+
+          ;; if: (if test then) or (if test then else) — surface block form
+          ;; Uses " :" (space before colon) so tokenizer separates them correctly.
+          (and *surface-context* (= head 'if) (>= (count form) 3))
+          (let [[_ test & body] form
+                mid             (count body)
+                then-forms      (if (> mid 1) (butlast body) body)
+                else-forms      (when (> mid 1) [(last body)])]
+            (str "if " (print-form test) " :\n"
+                 (str/join "\n" (map #(str "  " (print-form %)) then-forms))
+                 (when else-forms
+                   (str "\nelse :\n"
+                        (str/join "\n" (map #(str "  " (print-form %)) else-forms))))
+                 "\nend"))
+
+          ;; when/when-not: (when test body...)
+          (and *surface-context* (#{' when 'when-not} head) (>= (count form) 2))
+          (let [[_ test & body] form]
+            (str (name head) " " (print-form test) " :\n"
+                 (str/join "\n" (map #(str "  " (print-form %)) body))
+                 "\nend"))
+
+          ;; let: (let [x 1] body...) — single-binding uses surface block form.
+          ;; Multi-binding falls through to M-expression call below (let([...] ...)).
+          ;; This ensures multi-binding let roundtrips structurally correctly.
+          (and *surface-context*
+               (= head 'let) (vector? (second form))
+               (= 2 (count (second form)))  ; exactly one binding pair
+               (> (count form) 2))
+          (let [[_ bindings & body] form
+                [k v] bindings]
+            (str "let " (print-form k) " := " (print-form v) " :\n"
+                 (str/join "\n" (map #(str "  " (print-form %)) body))
+                 "\nend"))
+
+          ;; defn/defn-/defmacro: single-arity with vector params
+          ;; Note: "):\" uses ")" before ":" so tokenizer splits correctly.
+          (and *surface-context*
+               (#{' defn 'defn- 'defmacro} head)
+               (symbol? (second form))
+               (vector? (nth form 2 nil))
+               (> (count form) 3))
+          (let [[_ fname params & body] form]
+            (str (name head) " " (print-form fname)
+                 "(" (str/join ", " (map print-form params)) ") :\n"
+                 (str/join "\n" (map #(str "  " (print-form %)) body))
+                 "\nend"))
+
+          ;; fn: (fn [params] body...) — anonymous function without & rest params
+          ;; Only use surface form when params are plain symbols (no & rest).
+          ;; Always use block form (with " :") since the short form "fn(x) expr"
+          ;; is ambiguous with M-expression call "fn(x)" followed by expression.
+          (and *surface-context*
+               (= head 'fn) (not (anon-fn-shorthand? form))
+               (vector? (second form))
+               (not (some #{'&} (second form)))
+               (> (count form) 2))
+          (let [[_ params & body] form]
+            (str "fn(" (str/join ", " (map print-form params)) ") :\n"
+                 (str/join "\n" (map #(str "  " (print-form %)) body))
+                 "\nend"))
+
+          ;; for/doseq/dotimes: surface block form
+          (and *surface-context*
+               (#{' for 'doseq 'dotimes} head)
+               (vector? (second form))
+               (> (count form) 2))
+          (let [[_ bindings & body] form
+                pairs (partition 2 bindings)
+                bind-str (str/join ", " (map (fn [[t s]]
+                                               (if (keyword? t)
+                                                 (str (name t) " " (print-form s))
+                                                 (str (print-form t) " in " (print-form s))))
+                                             pairs))]
+            (str (name head) " " bind-str " :\n"
+                 (str/join "\n" (map #(str "  " (print-form %)) body))
+                 "\nend"))
+
+          ;; cond: (cond test1 val1 test2 val2 ...)
+          (and *surface-context* (= head 'cond) (>= (count form) 3))
+          (let [pairs (partition 2 (rest form))]
+            (str "cond :\n"
+                 (str/join "\n"
+                           (map (fn [[t v]]
+                                  (str "  " (if (= t :else) "else" (print-form t))
+                                       " => " (print-form v)))
+                                pairs))
+                 "\nend"))
+
+          ;; case: (case expr val1 result1 val2 result2 ... [default])
+          (and *surface-context* (= head 'case) (>= (count form) 3))
+          (let [[_ dispatch & rest-forms] form
+                ;; Last element might be default (odd count of rest-forms)
+                [pairs default] (if (odd? (count rest-forms))
+                                  [(partition 2 (butlast rest-forms)) (last rest-forms)]
+                                  [(partition 2 rest-forms) nil])]
+            (str "case " (print-form dispatch) " :\n"
+                 (str/join "\n"
+                           (map (fn [[v r]] (str "  " (print-form v) " => " (print-form r)))
+                                pairs))
+                 (when default (str "\n  else => " (print-form default)))
+                 "\nend"))
+
+          ;; do: (do body...)
+          (and *surface-context* (= head 'do) (> (count form) 1))
+          (let [[_ & body] form]
+            (str "do :\n"
+                 (str/join "\n" (map #(str "  " (print-form %)) body))
+                 "\nend"))
 
           ;; call: (f args...) → f(args...) when head is a symbol
           (symbol? head)

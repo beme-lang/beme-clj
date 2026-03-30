@@ -55,43 +55,46 @@
          (p/print-form '(def x (+ 1 2))))))
 
 (deftest print-defn
-  (is (= "defn(greet [name] str(\"Hello\" name))"
+  (is (= "defn greet(name) :\n  str(\"Hello\" name)\nend"
          (p/print-form '(defn greet [name] (str "Hello" name))))))
 
 (deftest print-defn-with-docstring
+  ;; defn with docstring doesn't match single-arity surface pattern (has docstring between name and params vector)
+  ;; falls back to M-expression call style
   (is (= "defn(greet \"Greets a person\" [name] println(name))"
          (p/print-form '(defn greet "Greets a person" [name] (println name))))))
 
 (deftest print-defn-multi-arity
+  ;; multi-arity defn (vector-headed arities) falls back to M-expression call style
   (is (= "defn(greet [name](greet(name \"!\")) [name punct](println(name punct)))"
          (p/print-form '(defn greet ([name] (greet name "!")) ([name punct] (println name punct)))))))
 
 (deftest print-fn-simple
-  (is (= "fn([x] +(x 1))"
+  (is (= "fn(x) :\n  x + 1\nend"
          (p/print-form '(fn [x] (+ x 1))))))
 
 (deftest print-fn-two-args
-  (is (= "fn([x y] *(x y))"
+  (is (= "fn(x, y) :\n  x * y\nend"
          (p/print-form '(fn [x y] (* x y))))))
 
 (deftest print-let
-  (is (= "let([x 1] +(x 2))"
+  (is (= "let x := 1 :\n  x + 2\nend"
          (p/print-form '(let [x 1] (+ x 2))))))
 
 (deftest print-if-inline
-  (is (= "if(>(x 0) \"pos\" \"neg\")"
+  (is (= "if x > 0 :\n  \"pos\"\nelse :\n  \"neg\"\nend"
          (p/print-form '(if (> x 0) "pos" "neg")))))
 
 (deftest print-if-single-branch
-  (is (= "if(>(x 0) \"pos\")"
+  (is (= "if x > 0 :\n  \"pos\"\nend"
          (p/print-form '(if (> x 0) "pos")))))
 
 (deftest print-when-simple
-  (is (= "when(>(x 0) println(\"pos\"))"
+  (is (= "when x > 0 :\n  println(\"pos\")\nend"
          (p/print-form '(when (> x 0) (println "pos"))))))
 
 (deftest print-do
-  (is (= "do(a() b())"
+  (is (= "do :\n  a()\n  b()\nend"
          (p/print-form '(do (a) (b))))))
 
 (deftest print-loop
@@ -99,11 +102,11 @@
          (p/print-form '(loop [i 0 acc []] (recur (inc i) (conj acc i)))))))
 
 (deftest print-for
-  (is (= "for([x xs y ys] [x y])"
+  (is (= "for x in xs, y in ys :\n  [x y]\nend"
          (p/print-form '(for [x xs y ys] [x y])))))
 
 (deftest print-for-with-when
-  (is (= "for([x xs :when >(x 0)] x)"
+  (is (= "for x in xs, when x > 0 :\n  x\nend"
          (p/print-form '(for [x xs :when (> x 0)] x)))))
 
 (deftest print-try-catch
@@ -127,6 +130,8 @@
          (p/print-form '(defmulti area :shape)))))
 
 (deftest print-defmethod
+  ;; defmethod doesn't match surface defn pattern (4th arg is dispatch val, not params vector)
+  ;; falls back to M-expression call style. (* r r) inside call args uses M-expression.
   (is (= "defmethod(area :circle [{:keys [r]}] *(r r))"
          (p/print-form '(defmethod area :circle [{:keys [r]}] (* r r))))))
 
@@ -333,8 +338,8 @@
 ;; ---------------------------------------------------------------------------
 
 (deftest print-case
-  (testing "case prints as call"
-    (is (= "case(x 1 \"one\" 2 \"two\" \"default\")"
+  (testing "case prints as surface block"
+    (is (= "case x :\n  1 => \"one\"\n  2 => \"two\"\n  else => \"default\"\nend"
            (p/print-form '(case x 1 "one" 2 "two" "default"))))))
 
 (deftest print-deftype
