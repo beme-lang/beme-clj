@@ -8,7 +8,10 @@
 
    Each generator targets input patterns that have historically caused bugs:
    bracket chars in strings, begin/end as data, signed-number ambiguity,
-   symbols with special chars, #_ placement, quoting edge cases, etc."
+   symbols with special chars, #_ placement, quoting edge cases, etc.
+
+   Exception policy: catch only ExceptionInfo (what beme-error throws) so
+   that real crashes (NPE, StackOverflow, ClassCast) fail the property."
   (:require [clojure.string :as str]
             [clojure.test :refer [deftest is]]
             [clojure.test.check.clojure-test :refer [defspec]]
@@ -31,7 +34,7 @@
           printed (p/print-beme-string forms1)
           forms2 (core/beme->forms printed)]
       (= (pr-str forms1) (pr-str forms2)))
-    (catch Exception _e false)))
+    (catch clojure.lang.ExceptionInfo _e false)))
 
 (defn- roundtrip-form-ok?
   "Print a form to beme, read it back — forms must match."
@@ -40,7 +43,7 @@
     (let [printed (p/print-beme-string [form])
           read-back (core/beme->forms printed)]
       (= [form] read-back))
-    (catch Exception _e false)))
+    (catch clojure.lang.ExceptionInfo _e false)))
 
 ;; ===========================================================================
 ;; Track 1 — Boundary-aware text generators
@@ -440,7 +443,7 @@
     (try
       (core/beme->forms beme-str)
       true
-      (catch Exception _e
+      (catch clojure.lang.ExceptionInfo _e
         ;; Some generated forms may be syntactically invalid (e.g. bad ratios);
         ;; that's fine — we're testing that the parser doesn't crash with NPE
         ;; or StackOverflow, just throws a clean beme error.
@@ -461,7 +464,7 @@
             forms1 (core/beme->forms text1)
             forms2 (core/beme->forms text2)]
         (= forms1 forms2))
-      (catch Exception _e
+      (catch clojure.lang.ExceptionInfo _e
         ;; If both fail to parse, spacing is still irrelevant
         true))))
 
@@ -474,7 +477,7 @@
             forms1 (core/beme->forms paren-text)
             forms2 (core/beme->forms begin-text)]
         (= forms1 forms2))
-      (catch Exception _e true))))
+      (catch clojure.lang.ExceptionInfo _e true))))
 
 (defspec prop-discard-transparent 300
   (prop/for-all [beme-str gen-discard-text]
@@ -483,7 +486,7 @@
       ;; are verified by comparing with/without the #_ form
       (core/beme->forms beme-str)
       true
-      (catch Exception _e true))))
+      (catch clojure.lang.ExceptionInfo _e true))))
 
 (defspec prop-opaque-roundtrips 300
   (prop/for-all [beme-str gen-opaque-text]
@@ -492,7 +495,7 @@
         ;; Opaque forms delegate to Clojure's reader; just verify
         ;; parse succeeds and produces non-nil
         (some? forms))
-      (catch Exception _e true))))
+      (catch clojure.lang.ExceptionInfo _e true))))
 
 (defspec prop-metadata-text-roundtrips 300
   (prop/for-all [beme-str gen-metadata-text]
@@ -507,7 +510,7 @@
     (try
       (core/beme->forms beme-str)
       true
-      (catch Exception _e true))))
+      (catch clojure.lang.ExceptionInfo _e true))))
 
 ;; ===========================================================================
 ;; Track 2 Properties — Form-level

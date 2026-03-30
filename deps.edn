@@ -9,7 +9,8 @@
                       org.clojure/test.check
                       {:mvn/version "1.1.1"}}
          :main-opts ["-m" "cognitect.test-runner"]
-         :exec-fn cognitect.test-runner.api/test}
+         :exec-fn cognitect.test-runner.api/test
+         :exec-args {:dirs ["test/beme"]}}
   :beme {:replace-paths ["src"]
          :replace-deps {}
          :ns-default beme.alpha.runtime.cli}
@@ -17,7 +18,7 @@
               :extra-deps {org.clojure/clojurescript {:mvn/version "1.12.134"}
                            olical/cljs-test-runner {:mvn/version "3.8.1"}}
               :main-opts ["-m" "cljs-test-runner.main"
-                          "-d" "test"
+                          "-d" "test/beme"
                           "-r" ".*-test$"
                           "-x" "node"]}
   :build {:extra-paths ["src"]
