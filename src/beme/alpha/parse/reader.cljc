@@ -35,7 +35,8 @@
   ([tokens opts source]
    {:tokens tokens :pos (volatile! 0) :depth (volatile! 0)
     :opts opts :clj-mode (volatile! false) :in-call-args (volatile! false)
-    :colon-consumed (volatile! false) :source source}))
+    :colon-consumed (volatile! false) :no-cross-line-paren (volatile! false)
+    :source source}))
 
 (defn- peof? [{:keys [tokens pos]}]
   (>= @pos (count tokens)))
@@ -186,8 +187,12 @@
       (let [tok  (ppeek p)
             prec (when (infix-tok? tok) (get infix-prec (:value tok)))]
         (if (and prec (>= prec min-prec)
-                 ;; Don't treat as infix if followed by ( or begin (M-expression call)
-                 (not (call-opener? (ppeek p 1))))
+                 ;; Don't treat as infix if op is immediately followed by ( with no space
+                 ;; (that's M-expression call style: +(a b) not a + b).
+                 ;; Paren-grouping like a + (b - c) has a space, so offsets differ.
+                 (not (and (call-opener? (ppeek p 1))
+                           (some? (:end-offset tok))
+                           (= (:offset (ppeek p 1)) (:end-offset tok)))))
           (let [op-str (:value tok)
                 op (case op-str
                      "|>" '->>
@@ -195,7 +200,10 @@
                      (symbol op-str))
                 _  (padvance! p)
                 right (parse-expr p (inc prec))]
-            (recur (list op left right)))
+            (recur (if (and (seq? left) (= (first left) op))
+                     ;; Flatten consecutive same-op pipes: (->> xs f) |> g → (->> xs f g)
+                     (apply list op (concat (rest left) [right]))
+                     (list op left right))))
           left)))))
 
 ;; ---------------------------------------------------------------------------
@@ -492,7 +500,10 @@
                     (let [params (parse-fn-params p)
                           _      (consume-colon! p "defn arity")
                           ;; stop at '(' (next arity) or 'end'
-                          body   (parse-body p #(tok-type? % :open-paren))]
+                          ;; :no-cross-line-paren prevents f\n(next-arity-params) from chaining
+                          _      (vreset! (:no-cross-line-paren p) true)
+                          body   (parse-body p #(tok-type? % :open-paren))
+                          _      (vreset! (:no-cross-line-paren p) false)]
                       (recur (conj arities (apply list params body))))
                     :else (errors/beme-error "Expected '(' for arity in multi-arity defn"
                                              (error-data p (select-keys (ppeek p) [:line :col])))))]
@@ -797,14 +808,22 @@
 
 (defn- maybe-call
   "If next token is ( or begin, parse call args and wrap — spacing is irrelevant.
-   In clj-mode (inside quoted lists), never forms calls — returns head as-is."
+   In clj-mode (inside quoted lists), never forms calls — returns head as-is.
+   When :no-cross-line-paren is set, cross-line ( does not form a call
+   (used inside multi-arity defn arity bodies to prevent param-list bleed)."
   [p head]
   (if @(:clj-mode p)
     head
-    (if (call-opener? (ppeek p))
-      (let [args (parse-call-args p)]
-        (apply list head args))
-      head)))
+    (let [next-tok (ppeek p)]
+      (if (call-opener? next-tok)
+        (if (and @(:no-cross-line-paren p)
+                 (tok-type? next-tok :open-paren)
+                 (let [prev-tok (when (> @(:pos p) 0) (nth (:tokens p) (dec @(:pos p))))]
+                   (and prev-tok (> (:line next-tok 0) (:end-line prev-tok 0)))))
+          head
+          (let [args (parse-call-args p)]
+            (apply list head args)))
+        head))))
 
 (defn- parse-form-base
   "Parse a single beme form."
@@ -898,9 +917,16 @@
         (let [loc (select-keys tok [:line :col])]
           (padvance! p)
           (apply list (parse-forms-until p :close-paren loc)))
-        (errors/beme-error
-          "Bare parentheses not allowed — every (...) needs a head: symbol, keyword, or vector. Write f(x) not (f x)."
-          (error-data p (select-keys tok [:line :col]))))
+        ;; In surface mode, parens group a single expression: (a + b) * c
+        (do
+          (padvance! p)
+          (let [inner (parse-expr p)]
+            (when-not (tok-type? (ppeek p) :close-paren)
+              (errors/beme-error
+                "Expected ')' to close grouped expression — use f(x) for calls, (expr) for grouping"
+                (error-data p (select-keys tok [:line :col]))))
+            (padvance! p)
+            inner)))
 
       :open-bracket (maybe-call p (parse-vector p))
       :open-brace (maybe-call p (parse-map p))
@@ -1117,8 +1143,9 @@
          trailing (:trailing-ws (meta tokens))]
      (loop [forms []]
        (if (peof? p)
-         (cond-> forms
-           trailing (with-meta {:trailing-ws trailing}))
+         (let [wrapped (wrap-body-lets forms)]
+           (cond-> wrapped
+             trailing (with-meta {:trailing-ws trailing})))
          (let [form (parse-expr p)]
            (if (discard-sentinel? form)
              (recur forms)

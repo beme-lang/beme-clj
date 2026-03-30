@@ -346,10 +346,11 @@
     (set? form)
     (str "#{" (str/join " " (map print-form form)) "}")
 
-    ;; symbol — escape begin/end to avoid delimiter conflict
+    ;; symbol — escape begin/end and word infix operators to avoid delimiter conflict
     (symbol? form)
     (let [n (name form)]
-      (if (and (nil? (namespace form)) (#{"begin" "end"} n))
+      (if (and (nil? (namespace form))
+               (#{"begin" "end" "or" "and" "not=" "mod" "rem"} n))
         (str "/" n "/")
         (str form)))
 
