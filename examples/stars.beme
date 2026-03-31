@@ -13,4 +13,4 @@ defn begin stars [owner repo]
   end
 end
 
-stars("beme-lang" "beme-clj")
+stars("xpojure-lang" "beme-clj")

@@ -1,8 +1,8 @@
 # beme-clj — begin/end and M-expressions for Clojure
 
-[![CI](https://github.com/beme-lang/beme-clj/actions/workflows/ci.yml/badge.svg)](https://github.com/beme-lang/beme-clj/actions/workflows/ci.yml)
+[![CI](https://github.com/xpojure-lang/beme-clj/actions/workflows/ci.yml/badge.svg)](https://github.com/xpojure-lang/beme-clj/actions/workflows/ci.yml)
 [![Clojure](https://img.shields.io/badge/Clojure-JVM%20%7C%20Babashka%20%7C%20ClojureScript-blue?logo=clojure&logoColor=white)](https://clojure.org)
-[![License](https://img.shields.io/github/license/beme-lang/beme-clj)](LICENSE)
+[![License](https://img.shields.io/github/license/xpojure-lang/beme-clj)](LICENSE)
 
 M-expressions were McCarthy's original intended syntax for Lisp (1960).
 S-expressions were meant to be internal representation only — but they stuck.
@@ -36,7 +36,7 @@ defn begin stars [owner repo]
   end
 end
 
-stars("beme-lang" "beme-clj")
+stars("xpojure-lang" "beme-clj")
 ```
 
 ## Installation
@@ -44,13 +44,13 @@ stars("beme-lang" "beme-clj")
 Add to `deps.edn`:
 
 ```clojure
-io.github.beme-lang/beme-clj {:mvn/version "0.5.0-alpha"}
+io.github.xpojure-lang/beme-clj {:mvn/version "0.5.0-alpha"}
 ```
 
 Or clone and use directly:
 
 ```bash
-git clone https://github.com/beme-lang/beme-clj.git
+git clone https://github.com/xpojure-lang/beme-clj.git
 cd beme-clj
 ```
 
@@ -97,10 +97,10 @@ Requires [Babashka](https://babashka.org) or [Clojure](https://clojure.org).
 
 | Editor | Repository | Features |
 |--------|-----------|----------|
-| [Zed](https://zed.dev) | [zed-beme](https://github.com/beme-lang/zed-beme) | Syntax highlighting, brackets, indentation, symbol outline |
-| [VS Code](https://code.visualstudio.com) | [vscode-beme](https://github.com/beme-lang/vscode-beme) | Syntax highlighting, brackets, indentation, folding |
+| [Zed](https://zed.dev) | [zed-beme](https://github.com/xpojure-lang/zed-beme) | Syntax highlighting, brackets, indentation, symbol outline |
+| [VS Code](https://code.visualstudio.com) | [vscode-beme](https://github.com/xpojure-lang/vscode-beme) | Syntax highlighting, brackets, indentation, folding |
 
-Tree-sitter grammar: [tree-sitter-beme](https://github.com/beme-lang/tree-sitter-beme)
+Tree-sitter grammar: [tree-sitter-beme](https://github.com/xpojure-lang/tree-sitter-beme)
 
 ## Documentation
 

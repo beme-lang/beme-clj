@@ -3,7 +3,7 @@
             [deps-deploy.deps-deploy :as dd]
             [beme.alpha.version]))
 
-(def lib 'io.github.beme-lang/beme-clj)
+(def lib 'io.github.xpojure-lang/beme-clj)
 (def version beme.alpha.version/version)
 (def class-dir "target/classes")
 (def jar-file (format "target/%s-%s.jar" (name lib) version))
@@ -20,9 +20,9 @@
                   :version version
                   :basis basis
                   :src-dirs ["src"]
-                  :scm {:url "https://github.com/beme-lang/beme-clj"
-                        :connection "scm:git:git://github.com/beme-lang/beme-clj.git"
-                        :developerConnection "scm:git:ssh://git@github.com/beme-lang/beme-clj.git"
+                  :scm {:url "https://github.com/xpojure-lang/beme-clj"
+                        :connection "scm:git:git://github.com/xpojure-lang/beme-clj.git"
+                        :developerConnection "scm:git:ssh://git@github.com/xpojure-lang/beme-clj.git"
                         :tag (str "v" version)}
                   :pom-data [[:licenses
                               [:license
