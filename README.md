@@ -1,5 +1,7 @@
 # beme-clj — begin/end and M-expressions for Clojure
 
+> **Archived.** This project has been superseded by [meme-clj](https://github.com/xpojure-lang/meme-clj), which drops `begin`/`end`, parses all dispatch forms natively, and adds a canonical formatter and guest-language platform. Use meme-clj for all new work.
+
 [![CI](https://github.com/xpojure-lang/beme-clj/actions/workflows/ci.yml/badge.svg)](https://github.com/xpojure-lang/beme-clj/actions/workflows/ci.yml)
 [![Clojure](https://img.shields.io/badge/Clojure-JVM%20%7C%20Babashka%20%7C%20ClojureScript-blue?logo=clojure&logoColor=white)](https://clojure.org)
 [![License](https://img.shields.io/github/license/xpojure-lang/beme-clj)](LICENSE)
