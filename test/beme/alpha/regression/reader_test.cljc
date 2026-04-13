@@ -179,18 +179,17 @@
 ;; Scar tissue: bare (...) without a head is a parse error.
 ;; ---------------------------------------------------------------------------
 
-(deftest bare-parens-are-error
-  (testing "bare (1 2 3) at top level is an error"
+(deftest paren-grouping
+  (testing "(expr) groups a single surface expression"
+    (is (= '[(* (+ a b) c)] (core/beme->forms "(a + b) * c"))))
+  (testing "(x) is a no-op group — just x"
+    (is (= '[x] (core/beme->forms "(x)"))))
+  (testing "() is still an error — empty group"
+    (is (thrown? #?(:clj Exception :cljs js/Error)
+                 (core/beme->forms "()"))))
+  (testing "(x y) without infix op is an error"
     (is (thrown-with-msg? #?(:clj Exception :cljs js/Error)
-                          #"[Bb]are parentheses"
-                          (core/beme->forms "(1 2 3)"))))
-  (testing "bare () is an error"
-    (is (thrown-with-msg? #?(:clj Exception :cljs js/Error)
-                          #"[Bb]are parentheses"
-                          (core/beme->forms "()"))))
-  (testing "bare (x y) at top level is an error"
-    (is (thrown-with-msg? #?(:clj Exception :cljs js/Error)
-                          #"[Bb]are parentheses"
+                          #"Expected '\)'"
                           (core/beme->forms "(x y)")))))
 
 ;; ---------------------------------------------------------------------------
@@ -418,8 +417,8 @@
                  (catch #?(:clj Exception :cljs :default) e e))]
       (is (some? e))
       (is (some? (:source-context (ex-data e))))))
-  (testing "bare paren error carries :source-context"
-    (let [src "(oops)"
+  (testing "grouped-paren unclosed error carries :source-context"
+    (let [src "(a b)"
           e (try (core/beme->forms src) nil
                  (catch #?(:clj Exception :cljs :default) e e))]
       (is (some? (:source-context (ex-data e)))))))

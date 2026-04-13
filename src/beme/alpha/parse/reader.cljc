@@ -27,14 +27,16 @@
 ;; Parser state
 ;; ---------------------------------------------------------------------------
 
-(def ^:private ^:const max-depth 512)
+(def ^:private ^:const max-depth 200)
 
 (defn- make-parser
   ([tokens] (make-parser tokens nil nil))
   ([tokens opts] (make-parser tokens opts nil))
   ([tokens opts source]
    {:tokens tokens :pos (volatile! 0) :depth (volatile! 0)
-    :opts opts :clj-mode (volatile! false) :source source}))
+    :opts opts :clj-mode (volatile! false) :in-call-args (volatile! false)
+    :colon-consumed (volatile! false) :no-cross-line-paren (volatile! false)
+    :source source}))
 
 (defn- peof? [{:keys [tokens pos]}]
   (>= @pos (count tokens)))
@@ -124,7 +126,7 @@
 (defn- tok-type? [tok typ]
   (and tok (= (:type tok) typ)))
 
-(declare parse-form parse-form-base)
+(declare parse-form parse-form-base parse-expr parse-vector parse-map parse-call-args call-opener?)
 
 ;; ---------------------------------------------------------------------------
 ;; Collections
@@ -148,10 +150,526 @@
        (let [tok (ppeek p)]
          (if (end-pred tok)
            (do (padvance! p) forms)
-           (let [form (parse-form p)]
+           (let [form (parse-expr p)]
              (if (discard-sentinel? form)
                (recur forms)
                (recur (conj forms form))))))))))
+
+;; ---------------------------------------------------------------------------
+;; Surface syntax: infix operators (Pratt parser)
+;; ---------------------------------------------------------------------------
+
+(def ^:private infix-prec
+  "Operator precedence for surface-syntax infix. Higher = tighter binding.
+   All operators are left-associative."
+  {"|>" 5, ".>" 5
+   "or"  10
+   "and" 20
+   "="   30, "not=" 30, "<" 30, ">" 30, "<=" 30, ">=" 30
+   "+"   40, "-"   40
+   "*"   50, "/"   50, "mod" 50, "rem" 50})
+
+(defn- infix-tok?
+  "Is this token a surface-syntax infix operator?"
+  [tok]
+  (and tok (= :symbol (:type tok)) (contains? infix-prec (:value tok))))
+
+(defn- pratt-climb
+  "Pratt precedence-climbing loop. Consumes infix operators while their
+   precedence >= min-prec, building left-associative binary forms.
+   No-ops in clj-mode (inside quoted lists).
+   An operator is NOT treated as infix if followed by '(' or 'begin',
+   since that means M-expression call style: +(1 2) not a + b."
+  [p left min-prec]
+  (if @(:clj-mode p)
+    left
+    (loop [left left]
+      (let [tok  (ppeek p)
+            prec (when (infix-tok? tok) (get infix-prec (:value tok)))]
+        (if (and prec (>= prec min-prec)
+                 ;; Don't treat as infix if op is immediately followed by ( with no space
+                 ;; (that's M-expression call style: +(a b) not a + b).
+                 ;; Paren-grouping like a + (b - c) has a space, so offsets differ.
+                 (not (and (call-opener? (ppeek p 1))
+                           (some? (:end-offset tok))
+                           (= (:offset (ppeek p 1)) (:end-offset tok)))))
+          (let [op-str (:value tok)
+                op (case op-str
+                     "|>" '->>
+                     ".>" '->
+                     (symbol op-str))
+                _  (padvance! p)
+                right (parse-expr p (inc prec))]
+            (recur (if (and (seq? left) (= (first left) op))
+                     ;; Flatten consecutive same-op pipes: (->> xs f) |> g → (->> xs f g)
+                     (apply list op (concat (rest left) [right]))
+                     (list op left right))))
+          left)))))
+
+;; ---------------------------------------------------------------------------
+;; Surface syntax: block forms
+;; ---------------------------------------------------------------------------
+
+(defn- colon-tok?
+  "Bare ':' token — used as block-start delimiter."
+  [tok]
+  (and tok (= :keyword (:type tok)) (= ":" (:value tok))))
+
+(defn- bind-op?
+  "':=' assignment operator."
+  [tok]
+  (and tok (= :keyword (:type tok)) (= ":=" (:value tok))))
+
+(defn- arrow-tok?
+  "'=>' clause arrow in cond/case."
+  [tok]
+  (and tok (= :symbol (:type tok)) (= "=>" (:value tok))))
+
+(defn- sym-value? [tok s]
+  (and tok (= :symbol (:type tok)) (= s (:value tok))))
+
+(defn- body-terminator?
+  "Is this token a block body terminator?
+   Handles both 'else' + ':' and 'else:' as a single token (tokenizer merges them)."
+  [tok]
+  (and tok (= :symbol (:type tok))
+       (#{"end" "else" "else:" "catch" "catch:" "finally" "finally:"} (:value tok))))
+
+(defn- closing-tok?
+  "Is this token a closing delimiter (}, ), ], end)?
+   Block forms should not trigger when a closing delimiter follows."
+  [tok]
+  (and tok (or (#{:close-paren :close-bracket :close-brace} (:type tok))
+               (end-symbol? tok))))
+
+(defn- consume-colon!
+  "Consume a bare ':' block-start. Errors if not found.
+   Also succeeds when :colon-consumed flag is set (tokenizer merged 'word:' into one token)."
+  [p context]
+  (cond
+    @(:colon-consumed p)
+    (vreset! (:colon-consumed p) false) ; colon was merged into preceding token
+
+    (colon-tok? (ppeek p))
+    (padvance! p)
+
+    :else
+    (errors/beme-error
+      (str "Expected ':' to start " context " body")
+      (error-data p (plast-loc p)))))
+
+(defn- strip-trailing-colon
+  "If form is a symbol with trailing ':', strip it and return [bare-sym true].
+   Otherwise return [form false]. Handles the tokenizer merging 'word:' into one symbol."
+  [form]
+  (if (and (symbol? form) (str/ends-with? (name form) ":"))
+    [(symbol (subs (name form) 0 (dec (count (name form))))) true]
+    [form false]))
+
+(defn- consume-block-intro!
+  "Consume a block-intro keyword that may have been merged with ':' by the tokenizer.
+   E.g. 'else:' is a single token; 'else' followed by ':' is two tokens.
+   Advances past the keyword and, if bare keyword, consumes the following ':'."
+  [p kw]
+  (let [tok (ppeek p)
+        val (:value tok)]
+    (padvance! p) ; consume the keyword (possibly with trailing ':')
+    (when-not (str/ends-with? val ":")
+      ;; bare keyword — ':' must follow separately
+      (consume-colon! p kw))))
+
+(defn- consume-end!
+  "Consume the 'end' keyword. Errors if not found."
+  [p context]
+  (if (end-symbol? (ppeek p))
+    (padvance! p)
+    (errors/beme-error
+      (str "Expected 'end' to close " context " block")
+      (error-data p (plast-loc p)))))
+
+(def ^:private let-stmt-marker ::let-stmt)
+
+(defn- wrap-body-lets
+  "Convert [::let-stmt target val] markers in a body vector into nested
+   (let [target val ...] ...) forms. Consecutive let-stmts are merged."
+  [stmts]
+  (loop [items (seq stmts) acc []]
+    (if (nil? items)
+      acc
+      (let [item (first items)]
+        (if (and (vector? item) (= let-stmt-marker (first item)))
+          (let [[lets rest] (split-with #(and (vector? %) (= let-stmt-marker (first %))) items)
+                bindings    (vec (mapcat (fn [s] [(nth s 1) (nth s 2)]) lets))
+                remaining   (wrap-body-lets (vec rest))]
+            (conj acc (apply list 'let bindings remaining)))
+          (recur (next items) (conj acc item)))))))
+
+(defn- parse-body
+  "Parse a body: expressions until a block terminator (end/else/catch/finally).
+   extra-terminator? is an optional predicate for additional stop conditions
+   (e.g. open-paren to stop multi-arity defn bodies at the next arity).
+   Returns a vector of forms with let-stmts wrapped."
+  ([p] (parse-body p nil))
+  ([p extra-terminator?]
+   (let [stmts
+         (loop [stmts []]
+           (cond
+             (peof? p)
+             (errors/beme-error "Unexpected end of file — missing 'end'"
+                                (error-data p (plast-loc p)))
+             (body-terminator? (ppeek p))
+             stmts
+             (and extra-terminator? (extra-terminator? (ppeek p)))
+             stmts
+             :else
+             (let [form (parse-expr p)]
+               (if (discard-sentinel? form)
+                 (recur stmts)
+                (recur (conj stmts form))))))]
+     (wrap-body-lets stmts))))
+
+(defn- parse-binding-target
+  "Parse a binding target: symbol, vector (destructure), or map (destructure)."
+  [p]
+  (let [tok (ppeek p)]
+    (case (:type tok)
+      :open-bracket (parse-vector p)
+      :open-brace   (parse-map p)
+      (parse-form p))))
+
+(defn- parse-one-binding
+  "Parse 'target := expr'. Returns [target expr]."
+  [p]
+  (let [target (parse-binding-target p)]
+    (when-not (bind-op? (ppeek p))
+      (errors/beme-error
+        "Expected ':=' in binding"
+        (error-data p (plast-loc p))))
+    (padvance! p)  ;; consume ':='
+    [target (parse-expr p)]))
+
+(defn- another-binding?
+  "Peek ahead: is the next token a binding target followed by ':='?
+   Used to decide whether to parse more bindings after the first."
+  [p]
+  (let [tok (ppeek p)]
+    (and tok
+         (not (colon-tok? tok))
+         (not (body-terminator? tok))
+         (not (peof? p))
+         (or (tok-type? tok :symbol) (tok-type? tok :open-bracket) (tok-type? tok :open-brace))
+         (not (#{"end" "else" "catch" "finally" "in" "when" "while" "let"} (:value tok)))
+         (bind-op? (ppeek p 1)))))
+
+(defn- parse-bindings
+  "Parse one or more comma-separated bindings: 'x := 1, y := 2'.
+   Returns flat vector [x 1 y 2]."
+  [p]
+  (loop [binds (let [[t v] (parse-one-binding p)] [t v])]
+    (if (another-binding? p)
+      (let [[t v] (parse-one-binding p)]
+        (recur (conj binds t v)))
+      binds)))
+
+;; --- surface-block-fn? ---
+;; For fn/defn, detect whether next '(' is surface-style params followed by ':'
+;; rather than M-expression call args. Scans forward to find matching ')' then
+;; checks for ':'.
+(defn- surface-block-fn?
+  "Returns true when current position is '(' that belongs to surface-style
+   fn/defn params: the matching ')' is followed by ':'."
+  [p]
+  (when (tok-type? (ppeek p) :open-paren)
+    (let [tokens (:tokens p)
+          start  @(:pos p)]
+      (loop [i (inc start) depth 1]
+        (let [tok (when (< i (count tokens)) (nth tokens i))]
+          (cond
+            (nil? tok) false
+            (tok-type? tok :open-paren)  (recur (inc i) (inc depth))
+            (tok-type? tok :close-paren)
+            (if (= depth 1)
+              (let [after (when (< (inc i) (count tokens)) (nth tokens (inc i)))]
+                (colon-tok? after))
+              (recur (inc i) (dec depth)))
+            :else (recur (inc i) depth)))))))
+
+;; --- Individual block parsers ---
+;; Each is called AFTER the keyword symbol has been consumed.
+
+(defn- parse-if-block
+  "if condition: body [else: body] end"
+  [p kw]
+  (let [cond-raw              (parse-expr p)
+        [cond-expr colon-in-cond?] (strip-trailing-colon cond-raw)]
+    (when-not colon-in-cond? (consume-colon! p "if"))
+    (let [then-body (parse-body p)
+          peek-val  (:value (ppeek p))]
+      (if (#{"else" "else:"} peek-val)
+        (do (consume-block-intro! p "else")
+            (let [else-body (parse-body p)]
+              (consume-end! p "if")
+              (apply list kw cond-expr (concat then-body else-body))))
+        (do (consume-end! p "if")
+            (apply list kw cond-expr then-body))))))
+
+(defn- parse-when-block
+  "when condition: body end"
+  [p kw]
+  (let [cond-raw              (parse-expr p)
+        [cond-expr colon-in-cond?] (strip-trailing-colon cond-raw)]
+    (when-not colon-in-cond? (consume-colon! p "when"))
+    (let [body (parse-body p)]
+      (consume-end! p "when")
+      (apply list kw cond-expr body))))
+
+(defn- parse-let-block
+  "let x := val        — let-statement (no body, scopes to enclosing block)
+   let x := val:       — let-expression with body and end"
+  [p kw]
+  (let [[target val] (parse-one-binding p)]
+    (if (colon-tok? (ppeek p))
+      ;; let-expression
+      (do (padvance! p)
+          (let [body (parse-body p)]
+            (consume-end! p "let")
+            (apply list kw [target val] body)))
+      ;; let-statement marker — parse-body wraps these into let forms
+      [let-stmt-marker target val])))
+
+(defn- parse-loop-block
+  "loop x := 0, y := n: body end"
+  [p]
+  (let [raw-binds (parse-bindings p)
+        ;; Last binding value may have ':' merged (e.g. 'items:' instead of 'items' + ':')
+        [last-val colon-in-last?] (strip-trailing-colon (last raw-binds))
+        binds (if (and colon-in-last? (> (count raw-binds) 0))
+                (conj (pop raw-binds) last-val)
+                raw-binds)]
+    (when-not colon-in-last? (consume-colon! p "loop"))
+    (let [body (parse-body p)]
+      (consume-end! p "loop")
+      (apply list 'loop binds body))))
+
+(defn- parse-do-block
+  "do: body end"
+  [p]
+  (consume-colon! p "do")
+  (let [body (parse-body p)]
+    (consume-end! p "do")
+    (apply list 'do body)))
+
+(defn- parse-fn-params
+  "Parse fn/defn params from '(x y z)'. Consumes the parens."
+  [p]
+  (vec (parse-call-args p)))
+
+(defn- parse-fn-block
+  "fn(params): body end  — anonymous function.
+   Requires surface-block-fn? to be true (called from block-parsers dispatch)."
+  [p]
+  (let [params (parse-fn-params p)
+        _      (consume-colon! p "fn")
+        body   (parse-body p)]
+    (consume-end! p "fn")
+    (apply list 'fn params body)))
+
+(defn- parse-defn-block
+  "defn name(params): body end  — function definition."
+  [p kw]
+  (let [name-tok (ppeek p)
+        _        (when-not (tok-type? name-tok :symbol)
+                   (errors/beme-error "Expected function name after defn"
+                                      (error-data p (plast-loc p))))
+        _        (padvance! p)
+        ;; name may have ':' merged for multi-arity: 'greet:' → name=greet, colon-in-name=true
+        name-raw (:value name-tok)
+        [fname-str colon-in-name?] (if (and (str/ends-with? name-raw ":") (> (count name-raw) 1))
+                                     [(subs name-raw 0 (dec (count name-raw))) true]
+                                     [name-raw false])
+        fname    (symbol fname-str)]
+    (if (or colon-in-name? (colon-tok? (ppeek p)))
+      ;; Multi-arity: defn name: (p1): body (p2): body end
+      (do (when-not colon-in-name? (padvance! p)) ; consume ':' if separate
+          (let [arities
+                (loop [arities []]
+                  (cond
+                    (peof? p)          (errors/beme-error "Unclosed defn" (error-data p (plast-loc p)))
+                    (end-symbol? (ppeek p)) arities
+                    (tok-type? (ppeek p) :open-paren)
+                    (let [params (parse-fn-params p)
+                          _      (consume-colon! p "defn arity")
+                          ;; stop at '(' (next arity) or 'end'
+                          ;; :no-cross-line-paren prevents f\n(next-arity-params) from chaining
+                          _      (vreset! (:no-cross-line-paren p) true)
+                          body   (parse-body p #(tok-type? % :open-paren))
+                          _      (vreset! (:no-cross-line-paren p) false)]
+                      (recur (conj arities (apply list params body))))
+                    :else (errors/beme-error "Expected '(' for arity in multi-arity defn"
+                                             (error-data p (select-keys (ppeek p) [:line :col])))))]
+            (consume-end! p "defn")
+            (apply list kw fname arities)))
+      ;; Single-arity
+      (let [params (parse-fn-params p)
+            _      (consume-colon! p "defn")
+            body   (parse-body p)]
+        (consume-end! p "defn")
+        (apply list kw fname params body)))))
+
+(defn- parse-for-bindings
+  "Parse 'x in xs, when pred, y in ys' for-loop bindings.
+   Consumes the trailing ':' (separate token or merged into last value/modifier).
+   Returns flat vector as Clojure for/doseq expects: [x xs :when pred y ys]."
+  [p]
+  (loop [binds []]
+    (cond
+      (colon-tok? (ppeek p))
+      (do (padvance! p) binds) ; consume ':' and return
+      (body-terminator? (ppeek p))
+      binds
+      ;; modifier: when/while/let
+      (and (tok-type? (ppeek p) :symbol)
+           (#{"when" "while" "let"} (:value (ppeek p))))
+      (let [mod-tok (ppeek p)
+            _       (padvance! p)
+            mod-kw  (keyword (:value mod-tok))
+            val-raw (parse-expr p)
+            [val colon?] (strip-trailing-colon val-raw)]
+        (if colon? (conj binds mod-kw val) (recur (conj binds mod-kw val))))
+      ;; binding: target in source
+      :else
+      (let [target (parse-binding-target p)]
+        (when-not (sym-value? (ppeek p) "in")
+          (errors/beme-error "Expected 'in' in for binding"
+                             (error-data p (plast-loc p))))
+        (padvance! p)  ;; consume 'in'
+        (let [source-raw (parse-expr p)
+              [source colon?] (strip-trailing-colon source-raw)]
+          (if colon? (conj binds target source) (recur (conj binds target source))))))))
+
+(defn- parse-for-block
+  "for x in xs, when pred: body end
+   parse-for-bindings already consumes the trailing ':'."
+  [p kw]
+  (let [binds (parse-for-bindings p)
+        body  (parse-body p)]
+    (consume-end! p "for")
+    (apply list kw binds body)))
+
+(defn- parse-cond-block
+  "cond: test => val ... [else => val] end"
+  [p]
+  (consume-colon! p "cond")
+  (let [clauses
+        (loop [clauses []]
+          (cond
+            (peof? p)
+            (errors/beme-error "Unclosed cond" (error-data p (plast-loc p)))
+            (end-symbol? (ppeek p))
+            clauses
+            :else
+            (let [test (if (sym-value? (ppeek p) "else")
+                         (do (padvance! p) :else)
+                         (parse-expr p))]
+              (when-not (arrow-tok? (ppeek p))
+                (errors/beme-error "Expected '=>' in cond clause"
+                                   (error-data p (plast-loc p))))
+              (padvance! p)  ;; consume '=>'
+              (let [val (parse-expr p)]
+                (recur (conj clauses test val))))))]
+    (consume-end! p "cond")
+    (apply list 'cond clauses)))
+
+(defn- parse-case-block
+  "case expr: val => result ... [else => result] end"
+  [p]
+  (let [dispatch-raw (parse-expr p)
+        [dispatch colon?] (strip-trailing-colon dispatch-raw)]
+    (when-not colon? (consume-colon! p "case"))
+    (let [clauses
+          (loop [clauses [] else-val nil]
+            (cond
+              (peof? p)
+              (errors/beme-error "Unclosed case" (error-data p (plast-loc p)))
+              (end-symbol? (ppeek p))
+              {:clauses clauses :else else-val}
+              :else
+              (let [test (if (sym-value? (ppeek p) "else")
+                           (do (padvance! p) ::else)
+                           (parse-expr p))]
+                (when-not (arrow-tok? (ppeek p))
+                  (errors/beme-error "Expected '=>' in case clause"
+                                     (error-data p (plast-loc p))))
+                (padvance! p)
+                (let [val (parse-expr p)]
+                  (if (= test ::else)
+                    (recur clauses val)
+                    (recur (conj clauses test val) else-val))))))]
+      (consume-end! p "case")
+      (let [{:keys [clauses] else-val :else} clauses]
+        (apply list 'case dispatch
+               (cond-> clauses else-val (conj else-val)))))))
+
+(defn- parse-try-block
+  "try: body catch ExType e: body [finally: body] end"
+  [p]
+  (consume-colon! p "try")
+  (let [try-body (parse-body p)
+        clauses
+        (loop [clauses []]
+          (cond
+            (peof? p)
+            (errors/beme-error "Unclosed try" (error-data p (plast-loc p)))
+            (end-symbol? (ppeek p))
+            clauses
+            (#{"catch" "catch:"} (:value (ppeek p)))
+            (do (padvance! p) ; consume 'catch' or 'catch:'
+                (let [exc-type (parse-form p)
+                      bind-raw (parse-form p)
+                      ;; binding may have ':' merged: 'e:' → binding=e, colon consumed
+                      [binding colon-in-binding?] (strip-trailing-colon bind-raw)]
+                  (when-not colon-in-binding? (consume-colon! p "catch"))
+                  (let [body (parse-body p)]
+                    (recur (conj clauses (apply list 'catch exc-type binding body))))))
+            (#{"finally" "finally:"} (:value (ppeek p)))
+            (do (consume-block-intro! p "finally")
+                (let [body (parse-body p)]
+                  (recur (conj clauses (apply list 'finally body)))))
+            :else
+            (errors/beme-error "Expected 'catch', 'finally', or 'end' in try block"
+                               (error-data p (select-keys (ppeek p) [:line :col])))))]
+    (consume-end! p "try")
+    (apply list 'try (concat try-body clauses))))
+
+;; ---------------------------------------------------------------------------
+;; Block-parsers registry
+;; Each entry: symbol → (fn [p] ...) called AFTER the keyword is consumed
+;; ---------------------------------------------------------------------------
+
+(def ^:private block-parsers
+  {'if       #(parse-if-block % 'if)
+   'if-not   #(parse-if-block % 'if-not)
+   'if-let   #(parse-if-block % 'if-let)
+   'if-some  #(parse-if-block % 'if-some)
+   'when     #(parse-when-block % 'when)
+   'when-not #(parse-when-block % 'when-not)
+   'when-let #(parse-when-block % 'when-let)
+   'when-some #(parse-when-block % 'when-some)
+   'let      #(parse-let-block % 'let)
+   'binding  #(parse-let-block % 'binding)
+   'with-open #(parse-let-block % 'with-open)
+   'loop     (fn [p] (parse-loop-block p))
+   'do       (fn [p] (parse-do-block p))
+   'fn       (fn [p] (parse-fn-block p))
+   'defn     #(parse-defn-block % 'defn)
+   'defn-    #(parse-defn-block % 'defn-)
+   'defmacro #(parse-defn-block % 'defmacro)
+   'for      #(parse-for-block % 'for)
+   'doseq    #(parse-for-block % 'doseq)
+   'dotimes  #(parse-for-block % 'dotimes)
+   'cond     (fn [p] (parse-cond-block p))
+   'case     (fn [p] (parse-case-block p))
+   'try      (fn [p] (parse-try-block p))})
 
 (defn- parse-vector [p]
   (let [loc (select-keys (ppeek p) [:line :col])]
@@ -193,9 +711,13 @@
   (let [tok (ppeek p)
         begin? (begin-symbol? tok)
         closer-type (if begin? :close-end :close-paren)
-        loc (select-keys tok [:line :col])]
+        loc (select-keys tok [:line :col])
+        prev-in-call-args @(:in-call-args p)]
     (padvance! p) ; ( or begin
-    (parse-forms-until p closer-type loc)))
+    (vreset! (:in-call-args p) true)
+    (let [result (parse-forms-until p closer-type loc)]
+      (vreset! (:in-call-args p) prev-in-call-args)
+      result)))
 
 
 ;; ---------------------------------------------------------------------------
@@ -286,14 +808,22 @@
 
 (defn- maybe-call
   "If next token is ( or begin, parse call args and wrap — spacing is irrelevant.
-   In clj-mode (inside quoted lists), never forms calls — returns head as-is."
+   In clj-mode (inside quoted lists), never forms calls — returns head as-is.
+   When :no-cross-line-paren is set, cross-line ( does not form a call
+   (used inside multi-arity defn arity bodies to prevent param-list bleed)."
   [p head]
   (if @(:clj-mode p)
     head
-    (if (call-opener? (ppeek p))
-      (let [args (parse-call-args p)]
-        (apply list head args))
-      head)))
+    (let [next-tok (ppeek p)]
+      (if (call-opener? next-tok)
+        (if (and @(:no-cross-line-paren p)
+                 (tok-type? next-tok :open-paren)
+                 (let [prev-tok (when (> @(:pos p) 0) (nth (:tokens p) (dec @(:pos p))))]
+                   (and prev-tok (> (:line next-tok 0) (:end-line prev-tok 0)))))
+          head
+          (let [args (parse-call-args p)]
+            (apply list head args)))
+        head))))
 
 (defn- parse-form-base
   "Parse a single beme form."
@@ -309,8 +839,47 @@
           "nil" nil
           "true" true
           "false" false
-          ;; all symbols — maybe call
-          (maybe-call p (symbol s))))
+          ;; surface block syntax: dispatch if keyword is registered AND
+          ;; not in clj-mode.
+          ;; Inside (call-args), suppress block parsers EXCEPT fn/fn* so that
+          ;; M-expression style works: if(cond t f), let([x 1] body), etc.
+          ;; fn/fn* are allowed in call-args: map(fn(x): x + 1 end, xs).
+          ;; Handle tokenizer-merged 'keyword:' (e.g. 'do:' = 'do' + ':').
+          ;; do/try/cond only trigger if ':' immediately follows (or was merged).
+          (let [;; Handle merged colon: "do:" → base "do", colon-merged? = true
+                colon-merged? (and (str/ends-with? s ":") (> (count s) 1)
+                                   (not (= s ":")))
+                s-base        (if colon-merged? (subs s 0 (dec (count s))) s)
+                sym           (symbol s)
+                sym-base      (symbol s-base)
+                block-fn      (and (not @(:clj-mode p))
+                                   (or (not @(:in-call-args p))
+                                       ;; fn/fn* in call-args only when surface-block style
+                                       (and ('#{fn fn*} sym-base) (surface-block-fn? p)))
+                                   (get block-parsers sym-base))]
+            (if block-fn
+              (cond
+                ;; do/try/cond only trigger as surface block when ':' follows or was merged
+                (and (#{'do 'try 'cond} sym-base)
+                     (not colon-merged?)
+                     (not (colon-tok? (ppeek p))))
+                (maybe-call p sym) ; plain symbol, not a block
+                ;; closing delimiter follows — can't start a block
+                (closing-tok? (ppeek p))
+                (maybe-call p sym)
+                ;; nil follows (EOF) — can't start a block
+                (nil? (ppeek p))
+                (maybe-call p sym)
+                ;; fn/defn/etc: fall back to M-expr call if not surface params
+                (and (call-opener? (ppeek p))
+                     (not (surface-block-fn? p)))
+                (maybe-call p sym)
+                ;; surface block form — set colon-consumed flag if colon was merged
+                :else
+                (do (when colon-merged?
+                      (vreset! (:colon-consumed p) true))
+                    (block-fn p)))
+              (maybe-call p sym)))))
 
       :keyword
       (let [v (:value tok)]
@@ -348,9 +917,16 @@
         (let [loc (select-keys tok [:line :col])]
           (padvance! p)
           (apply list (parse-forms-until p :close-paren loc)))
-        (errors/beme-error
-          "Bare parentheses not allowed — every (...) needs a head: symbol, keyword, or vector. Write f(x) not (f x)."
-          (error-data p (select-keys tok [:line :col]))))
+        ;; In surface mode, parens group a single expression: (a + b) * c
+        (do
+          (padvance! p)
+          (let [inner (parse-expr p)]
+            (when-not (tok-type? (ppeek p) :close-paren)
+              (errors/beme-error
+                "Expected ')' to close grouped expression — use f(x) for calls, (expr) for grouping"
+                (error-data p (select-keys tok [:line :col]))))
+            (padvance! p)
+            inner)))
 
       :open-bracket (maybe-call p (parse-vector p))
       :open-brace (maybe-call p (parse-map p))
@@ -512,14 +1088,23 @@
 (defn- parse-call-chain
   "After parsing a form, check for chained call openers: f(x)(y) → ((f x) y).
    Handles arbitrary depth: f(x)(y)(z) → (((f x) y) z).
-   Skipped in clj-mode (inside quoted lists) and for discard sentinels."
+   Skipped in clj-mode (inside quoted lists) and for discard sentinels.
+   Cross-line chaining is suppressed: 'f\\n(x)' does NOT chain, only 'f(x)'
+   on the same line does. This prevents multi-arity defn arity bodies from
+   bleeding into the next arity's params."
   [p form]
-  (if (and (not @(:clj-mode p))
-           (not (discard-sentinel? form))
-           (call-opener? (ppeek p)))
-    (let [args (parse-call-args p)]
-      (recur p (apply list form args)))
-    form))
+  (let [next-tok (ppeek p)
+        prev-tok (when (and next-tok (> @(:pos p) 0))
+                   (nth (:tokens p) (dec @(:pos p))))
+        cross-line? (and prev-tok next-tok
+                         (> (:line next-tok 0) (:end-line prev-tok 0)))]
+    (if (and (not @(:clj-mode p))
+             (not (discard-sentinel? form))
+             (not cross-line?)
+             (call-opener? next-tok))
+      (let [args (parse-call-args p)]
+        (recur p (apply list form args)))
+      form)))
 
 (defn- parse-form
   "Parse a single beme form. Attaches :ws (leading whitespace/comments)
@@ -537,6 +1122,13 @@
       (finally
         (vswap! (:depth p) dec)))))
 
+(defn- parse-expr
+  "Parse a full expression: a syntactic form plus any infix operators (Pratt parser).
+   This is the primary expression entry point for surface syntax.
+   When min-prec is supplied, only operators with prec >= min-prec are consumed."
+  ([p]         (pratt-climb p (parse-form p) 0))
+  ([p min-prec] (pratt-climb p (parse-form p) min-prec)))
+
 ;; ---------------------------------------------------------------------------
 ;; Public API
 ;; ---------------------------------------------------------------------------
@@ -551,9 +1143,10 @@
          trailing (:trailing-ws (meta tokens))]
      (loop [forms []]
        (if (peof? p)
-         (cond-> forms
-           trailing (with-meta {:trailing-ws trailing}))
-         (let [form (parse-form p)]
+         (let [wrapped (wrap-body-lets forms)]
+           (cond-> wrapped
+             trailing (with-meta {:trailing-ws trailing})))
+         (let [form (parse-expr p)]
            (if (discard-sentinel? form)
              (recur forms)
              (recur (conj forms form)))))))))

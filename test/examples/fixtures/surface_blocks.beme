@@ -1,0 +1,62 @@
+if x > 0:
+  :pos
+end
+if x > 0:
+  :pos
+else:
+  :neg
+end
+when x > 0:
+  println(x)
+end
+do:
+  step1()
+  step2()
+end
+cond:
+  x < 0 => :neg
+  x = 0 => :zero
+  else  => :pos
+end
+case x:
+  1 => :one
+  2 => :two
+  else => :other
+end
+for x in xs:
+  x * 2
+end
+for x in xs, when even?(x):
+  x
+end
+try:
+  risky()
+catch Exception e:
+  handle(e)
+end
+try:
+  f()
+finally:
+  cleanup()
+end
+let x := 5:
+  x * 2
+end
+defn f(x):
+  x + 1
+end
+defn g(x):
+  let y := x + 1
+  y * 2
+end
+defn greet:
+  (): "Hello!"
+  (name): str("Hello, " name)
+end
+loop acc := 0, i := 0:
+  if i >= 10:
+    acc
+  else:
+    recur(acc + i, i + 1)
+  end
+end

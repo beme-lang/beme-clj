@@ -18,7 +18,7 @@
 
 (deftest forms->beme-test
   (testing "single form"
-    (is (= "+(1 2)" (core/forms->beme ['(+ 1 2)]))))
+    (is (= "1 + 2" (core/forms->beme ['(+ 1 2)]))))
   (testing "multiple forms separated by blank line"
     (is (= "def(x 42)\n\nprintln(x)"
            (core/forms->beme ['(def x 42) '(println x)])))))
@@ -57,7 +57,7 @@
 #?(:clj
 (deftest clj->beme-test
   (testing "converts Clojure source to beme"
-    (is (= "defn(f [x] +(x 1))"
+    (is (= "defn f(x) :\n  x + 1\nend"
            (core/clj->beme "(defn f [x] (+ x 1))"))))
   (testing "multiple forms"
     (is (= "def(x 42)\n\nprintln(x)"
@@ -124,7 +124,7 @@
 (deftest beme->forms-error-has-location
   (testing "parse error through beme->forms carries :line and :col in ex-data"
     (try
-      (core/beme->forms "(bare parens)")
+      (core/beme->forms "(a b)")
       (is false "should have thrown")
       (catch #?(:clj clojure.lang.ExceptionInfo :cljs ExceptionInfo) e
         (let [data (ex-data e)]
@@ -134,7 +134,7 @@
 (deftest beme->clj-error-has-location
   (testing "parse error through beme->clj carries :line and :col in ex-data"
     (try
-      (core/beme->clj "(bare parens)")
+      (core/beme->clj "(a b)")
       (is false "should have thrown")
       (catch #?(:clj clojure.lang.ExceptionInfo :cljs ExceptionInfo) e
         (let [data (ex-data e)]
@@ -144,7 +144,7 @@
 (deftest run-pipeline-error-has-location
   (testing "parse error through run-pipeline carries :line and :col in ex-data"
     (try
-      (core/run-pipeline "(bare parens)")
+      (core/run-pipeline "(a b)")
       (is false "should have thrown")
       (catch #?(:clj clojure.lang.ExceptionInfo :cljs ExceptionInfo) e
         (let [data (ex-data e)]
@@ -154,11 +154,11 @@
 (deftest beme->forms-error-is-ex-info
   (testing "parse error is ExceptionInfo with descriptive message"
     (try
-      (core/beme->forms "(bare parens)")
+      (core/beme->forms "(a b)")
       (is false "should have thrown")
       (catch #?(:clj clojure.lang.ExceptionInfo :cljs ExceptionInfo) e
         (is (string? (ex-message e)))
-        (is (re-find #"(?i)paren" (ex-message e)))))))
+        (is (re-find #"(?i)Expected '\)'" (ex-message e)))))))
 
 ;; ---------------------------------------------------------------------------
 ;; run-pipeline

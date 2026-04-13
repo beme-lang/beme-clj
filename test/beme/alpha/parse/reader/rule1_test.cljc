@@ -186,31 +186,31 @@
     (is (= :a (second form)))))
 
 ;; ===========================================================================
-;; Bare parens rejection
+;; Paren grouping — (expr) groups a single surface expression
 ;; ===========================================================================
 
-(deftest bare-parens-error-empty
-  (is (thrown-with-msg? #?(:clj Exception :cljs js/Error)
-                        #"[Bb]are parentheses"
-                        (core/beme->forms "()"))))
+(deftest paren-grouping-arithmetic
+  (is (= '[(* (+ a b) c)] (core/beme->forms "(a + b) * c"))))
 
-(deftest bare-parens-error-with-content
-  (is (thrown-with-msg? #?(:clj Exception :cljs js/Error)
-                        #"[Bb]are parentheses"
-                        (core/beme->forms "(1 2 3)"))))
+(deftest paren-grouping-nested
+  (is (= '[(+ a (* (- b c) d))] (core/beme->forms "a + (b - c) * d"))))
 
-(deftest bare-parens-error-with-symbols
+(deftest paren-grouping-single-symbol
+  ;; (x) is just x — a no-op group
+  (is (= '[x] (core/beme->forms "(x)"))))
+
+(deftest paren-grouping-empty-is-error
+  (is (thrown? #?(:clj Exception :cljs js/Error)
+               (core/beme->forms "()"))))
+
+(deftest paren-grouping-multi-element-is-error
+  ;; (x y) has no infix op — x is parsed, then ) expected but y found
   (is (thrown-with-msg? #?(:clj Exception :cljs js/Error)
-                        #"[Bb]are parentheses"
+                        #"Expected '\)'"
                         (core/beme->forms "(x y)"))))
 
-(deftest bare-parens-error-nested
-  (is (thrown-with-msg? #?(:clj Exception :cljs js/Error)
-                        #"[Bb]are parentheses"
-                        (core/beme->forms "do((1 2))"))))
-
 ;; ===========================================================================
-;; Quote exception — '(...) is the only bare-paren form
+;; Quote exception — '(...) is still bare-list syntax
 ;; ===========================================================================
 
 (deftest quote-list-allowed
